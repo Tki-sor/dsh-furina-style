@@ -127,10 +127,19 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body { --dsw-alias-...: ..
 2. **`[class*="_frame"]` 的模糊匹配**：Windows 整窗涂色的源头没有 data 属性，
    只能这样抓。如果宿主改类名（概率低），这条规则失效，表现为标题栏重新被涂色，
    **不会**破坏其它任何东西。
-3. **不注册设置面板**：第一版刻意不做 settings.section，减少依赖面。三个开关
-   通过 `localStorage` + 属性表达；如果以后要 UI，再加 section 即可（claude-style
-   的 `settings.section` 注册是现成模板）。
+3. **设置面板的持久化用 localStorage**（`dsh-furina:prefs`），不是 Host 的
+   settings 服务。理由：用户要的是「配置出现在 DeepSeek 设置界面里」，那是
+   `settings.section` 槽位的事；持久化后端用 localStorage 可以完全留在客户端，
+   少一条 Host 依赖路径 —— 本插件因此至今 `index.js` 仍是空实现。
 4. **与 skin-center 的 furina 皮肤重叠**：`furina` 模式只做修补，不接管画布。
    想看到本插件的完整配色，请把皮肤中心的激活皮肤设为「无」，此时进入 `own` 模式。
 5. **`lib/client.js` 是产物**：仓库里同时提交 `src/` 与 `lib/`，安装者不需要 node
    也能用；改源码后记得 `node scripts/build.mjs`。
+6. **重建后必须重启应用（不是刷新）**：宿主按「文件 mtime/ctime/size」给每个
+   插件 chunk 算 `rev` 并缓存在 Host 进程内存里；`lib/client.js` 一变，内存里
+   的旧 rev 就与磁盘不符，`/plugins/??<pkg>/client.js&rev=<旧>` 一律 404，页面
+   卡在启动屏并报 `dsh-furina-style: import failed`。这是宿主机制，不是插件
+   的 bug，写进 README 免得使用者踩。
+7. **不碰第三方插件的 DOM**：0.1.x 有过三条「隐藏吉祥物 / 封号彩蛋 / 桌宠」
+   规则，0.3.0 全部删掉。主题只负责自己的表面；`[class*="_bubble"]` 那条实际上
+   命中的是 dsh-pet 的气泡，等于在改别人的界面 —— 这类选择器一律不写。

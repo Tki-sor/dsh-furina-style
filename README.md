@@ -20,8 +20,22 @@
 不留任何残影。
 
 > **0.2.0 起**：配置项移进了「设置 → 芙宁娜主题」，不再需要手改 localStorage；
-> 默认背景图换成芙宁娜插画；顺手修掉了输入框下方 40px 悬空；并默认收起
-> claude-style 的吉祥物/封号彩蛋与 dsh-pet 的桌宠（可分别关掉）。
+> 默认背景图换成芙宁娜插画；顺手修掉了输入框下方 40px 悬空。
+> **0.3.0 起**：去掉「隐藏第三方吉祥物 / 封号彩蛋 / 桌宠」三个开关 ——
+> 主题只负责自己的表面，不替别的插件做内容策略。
+
+### 0.3.0 做了什么
+
+- **细节层**（`src/50-details.css`）：行内代码、表格、分隔线、`kbd`、链接、
+  列表、标题间距、工具调用行、过程组、输入占位文案 —— 宿主没有主题化、
+  但每条回答里都会反复出现的东西。
+- **修掉三条「看着生效、其实一个节点都没选中」的规则**：
+  `[class*="_bubble"]`（宿主不画用户气泡，那是渲染它的插件画的）、
+  `[data-windows-titlebar] [class*="_frame"]`（这个属性挂在 `<html>` 自己身
+  上，得写成 `html[...][data-windows-titlebar] [class*="_frame"]`）、
+  `::placeholder`（输入框是 lexical 的 `contenteditable`，占位文案是它后面
+  那个 `aria-hidden` 的兄弟节点）。
+- 输入卡占位文案降到 `label-tertiary`，第一眼能分清「空输入框」和「已输入」。
 
 ---
 
@@ -34,8 +48,18 @@
 plugin_manager install_bundle {"target": "<绝对路径>/dsh-furina-style"}
 ```
 
-安装后**刷新页面**（`Ctrl+R`）即生效。插件通过软链接挂进 profile，
-所以之后改源码只需要 `node scripts/build.mjs` + 刷新，不必重装。
+安装后**重启应用**（不是刷新页面）才会生效。
+
+### ⚠️ 重新构建之后必须重启应用，不要只刷新页面
+
+宿主给每个插件 chunk 算了一个 `rev`（= 文件 mtime/ctime/size 的哈希），缓存在
+Host 进程内存里；`lib/client.js` 一变，内存里的 rev 就和磁盘对不上，按旧 rev
+去取 chunk 一律 404，页面会卡在启动屏并弹出「DeepSeek Harness 无法使用 /
+`dsh-furina-style`: import failed」。**重建 `lib/client.js` 之后一定要完整重启
+应用**（退出再打开），只 `location.reload()` 会稳定复现这个 404。
+
+只改 CSS 的令牌值但没重新 build 时，刷新页面当然也是没用的 —— CSS 在
+`lib/client.js` 里面。
 
 ### 从源码构建
 
@@ -43,7 +67,7 @@ plugin_manager install_bundle {"target": "<绝对路径>/dsh-furina-style"}
 node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
 ```
 
-`lib/client.js` 是产物（顶部有 GENERATED 标记），不要手改。
+`lib/client.js` 是产物（顶部有 GENERATED 标记），不要手改。构建完记得重启应用。
 
 ---
 
@@ -58,9 +82,6 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
 | 插画强度 | 10% – 100% | 改的是纱的 alpha，不是整层 opacity —— 调低时插画更清楚，底色不变亮 |
 | 动效 | 跟随系统 / 开启 / 减弱 | 写 `data-dsh-furina-motion`，与 `prefers-reduced-motion` 双保险 |
 | 布局微调 | 开 / 关 | 输入卡圆角与投影、对话列宽、会话头分隔线 |
-| 隐藏第三方吉祥物 | 开（默认） | 只对已装的 `dsh-claude-style` 的螃蟹/小鲸鱼生效；没装就是一条死规则 |
-| 禁用「封号」彩蛋 | 开（默认） | 只对已装的 `dsh-claude-style` 生效；**本插件自己不含任何彩蛋** |
-| 隐藏桌面宠物 | 开（默认） | 只对已装的 `@linxin666/dsh-pet` 生效（右下角那只鲸鱼娘是它带来的） |
 
 底部还有一行「当前状态」，显示此刻是谁在负责表面（独立 / 修补芙宁娜皮肤 /
 让路给其它皮肤 / 让路给 claude-style），以及一个「恢复默认」。
@@ -74,22 +95,12 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
   "background": "art",
   "backgroundOpacity": 0.55,
   "layout": true,
-  "motion": "system",
-  "hideMascot": true,
-  "hideBan": true,
-  "hidePet": true
+  "motion": "system"
 }
 ```
 
 0.1.0 只存过 `dsh-furina:motion`，升级时会自动迁移一次，然后删掉旧键。
 读不到 localStorage（隐私模式、禁用存储）时全部回落到内置默认值，不报错。
-
-### 为什么要「隐藏第三方」这种开关
-
-本插件**不包含**任何吉祥物、桌面宠物或彩蛋，这些元素来自别的插件。但用户
-常把它们误认为是主题带来的，所以给三个可关的开关 + 默认收起，让「装上本主题
-后界面就只剩水色」这件事是可验证的。关掉开关也只是放开 CSS 隐藏，不碰对方
-插件一行代码；对方卸载后这几条规则自然匹配不到任何节点。
 
 ### 默认背景图
 
@@ -142,9 +153,7 @@ DSH 的 skin-center 皮肤包（`skin.json` + `skin.css` + `patches.css`）是**
 
 1. 点亮 `data-dsh-furina-handoff="claude-style"`；
 2. 把 `data-dsh-furina-layout` 切成 `off` —— **整块布局规则让路**；
-3. 只保留配色 token 重映射，让你仍然得到芙宁娜的色；
-4. 顺手把它那两个我们不需要的分节收起来（吉祥物 `hide-mascot`、封号彩蛋
-   `hide-ban`，各有一个默认开启的开关）。只做 CSS 隐藏，不碰它的代码。
+3. 只保留配色 token 重映射，让你仍然得到芙宁娜的色。
 
 这样两套几何不会互相错位（claude-style 会改 composer 圆角、侧栏行高、Windows
 标题栏等全局布局，两边同时全量跑必然打架）。
@@ -201,8 +210,9 @@ dsh-furina-style/
 │   ├── 00-tokens.css     # 设计令牌 + 三种表面模式的配色
 │   ├── 10-layout.css     # 布局（L1–L9）
 │   ├── 20-motion.css     # 动效（M1–M11）
-│   ├── 30-surface.css    # 背景插画层 + 让路规则（隐藏第三方吉祥物/彩蛋/桌宠）
+│   ├── 30-surface.css    # 背景插画层 + 让容器背景透明
 │   ├── 40-settings.css   # 设置面板样式（.fh-set-*）
+│   ├── 50-details.css    # 细节层（行内代码/表格/工具行/占位文案）
 │   └── client.js         # 偏好读写 / 属性同步 / 设置面板 / 样式注入模板
 ├── lib/client.js         # 构建产物（GENERATED）
 ├── scripts/build.mjs     # 零依赖构建脚本
@@ -237,9 +247,9 @@ dsh-furina-style/
 不支持 `:has()` / `color-mix()` 时样式会优雅降级：颜色变量仍然生效，
 用到这两个特性的布局/装饰规则整条失效，不会破坏宿主原有布局。
 
-**对外部插件零依赖**：`dsh-claude-style`、`@linxin666/dsh-pet`、皮肤中心
-都只是「如果装了，就顺手接管它们的几个节点」的关系。它们全都不装时，本插件
-的每条规则只是匹配不到节点，不会报错、不会空等、不会影响启动。
+**对外部插件零依赖**：`dsh-claude-style`、皮肤中心都只是「如果装了，就读一下
+它的状态属性」的关系，本插件从不隐藏、不修改、不依赖它们的任何 DOM。它们全都
+不装时，本插件照常工作，不会报错、不会空等、不会影响启动。
 
 ---
 

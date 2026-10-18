@@ -99,7 +99,25 @@ async function main() {
   const built = BANNER + '\n' + clientSource.replace(PLACEHOLDER, JSON.stringify(stylesheet));
 
   await mkdir(OUT, { recursive: true });
-  await writeFile(join(OUT, 'client.js'), built, 'utf8');
+  const target = join(OUT, 'client.js');
+
+  /**
+   * 内容没变就不写盘。
+   *
+   * 这不是为了省 IO：宿主按 lib/client.js 的 mtime/ctime/size 算插件 chunk 的
+   * rev 并缓存在 Host 进程内存里。写一次文件 → rev 变 → 运行中的宿主按旧 rev
+   * 取 chunk 一律 404 → 页面卡在启动屏（报 `import failed`），必须重启应用。
+   * 所以「只改了 README、什么都没变」的重建不应该让 rev 失效。
+   */
+  let previous = null;
+  try {
+    previous = await readFile(target, 'utf8');
+  } catch {
+    /* 首次构建，没有旧产物 */
+  }
+
+  const unchanged = previous === built;
+  if (!unchanged) await writeFile(target, built, 'utf8');
 
   const kb = (n) => (n / 1024).toFixed(1) + ' kB';
   console.log('css files  : ' + cssFiles.length);
@@ -108,7 +126,12 @@ async function main() {
     console.log('  ' + file.slice(ROOT.length + 1).replace(/\\/g, '/') + '  ' + kb(raw.length));
   }
   console.log('stylesheet : ' + kb(stylesheet.length));
-  console.log('output     : lib/client.js  ' + kb(built.length));
+  console.log('output     : lib/client.js  ' + kb(built.length) + (unchanged ? '  (unchanged, not written)' : ''));
+  if (!unchanged) {
+    console.log('');
+    console.log('NOTE: lib/client.js changed — the running app caches the old chunk rev.');
+    console.log('      Restart the app before testing; a page reload alone will 404.');
+  }
 }
 
 main().catch((error) => {

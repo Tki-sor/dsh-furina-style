@@ -1,0 +1,186 @@
+/* ============================================================================
+   50. 细节层：正文里的「小东西」和工具行
+   ----------------------------------------------------------------------------
+   这一节只做两类事：
+     1) 宿主没有主题化、但每一条回答里都会反复出现的元素（行内代码、表格、
+        分隔线、kbd、链接、列表）；
+     2) 工具调用 / 过程组这类「结构性但不是内容」的行，给它们一副克制的骨架。
+
+   纪律（与 10/20 一致）：
+     · 只用宿主公开的 data-* 与语义标签（code / table / hr / kbd / a / li），
+       不去猜第三方插件的类名，也不依赖 CSS module 的 hash。
+     · 所有规则都挂在 html[data-dsh-furina][data-dsh-furina-layout="on"] 下，
+       布局开关关掉就完全退回宿主原样。
+     · 颜色全部走 token，不写死色值（选区那片除外，在 L8 已注明原因）。
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   D1. 行内代码：一层极薄的水膜 + 等宽字体
+   ---------------------------------------------------------------------------
+   宿主默认把行内 code 和正文同色，扫读时和普通词混在一起。这里只加背景与
+   内边距，不改字号 —— 中文行内夹英文时字号一变就会跳行。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :not(pre) > code {
+  border-radius: var(--dsw-radius-xs, 4px);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+  padding: 1px 5px;
+  font-size: 0.92em;
+  font-variant-ligatures: none;
+}
+
+/* 块级代码容器自带底色时不要重复涂（主题不知道宿主有没有给），只把圆角统一 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] pre {
+  border-radius: var(--dsw-radius-md, 12px);
+}
+
+/* ---------------------------------------------------------------------------
+   D2. 表格：发丝线 + 表头水膜 + 斑马纹
+   ---------------------------------------------------------------------------
+   宿主表格是无边框的（td 只有一条 0.667px 下边线），多列时很难对齐阅读。
+   这里只补「行与行之间」的边界，不画外框 —— 外框会和对话流的水面打架。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] thead th {
+  border-bottom: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 90%, transparent);
+  background: color-mix(in srgb, var(--fh-brand-wash) 26%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] tbody tr:hover td {
+  background: color-mix(in srgb, var(--fh-brand) 8%, transparent);
+}
+
+/* 表格滚动容器：贴一层极薄的顶/底渐隐，提示「还能横向滚」 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] [class*="_tableScroll"] {
+  border-radius: var(--dsw-radius-sm, 8px);
+}
+
+/* ---------------------------------------------------------------------------
+   D3. 分隔线与键盘键
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] hr {
+  border: 0;
+  border-top: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 85%, transparent);
+  margin: 20px 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] kbd {
+  border-radius: var(--dsw-radius-xs, 4px);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l3) 90%, transparent);
+  border-bottom-width: 1.5px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 80%, transparent);
+  padding: 1px 6px;
+  font-family: var(--dsw-font-family);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------
+   D4. 链接与列表
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] a {
+  color: var(--dsw-alias-brand-primary);
+  text-decoration-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2.5px;
+  transition: text-decoration-color var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] a:hover {
+  text-decoration-color: currentColor;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(ul, ol) {
+  padding-inline-start: 1.45em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] li::marker {
+  color: color-mix(in srgb, var(--fh-brand) 62%, transparent);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] li + li {
+  margin-top: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   D5. 标题层级：只调「层与层之间」的呼吸，不动宿主定义的字号
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(h1, h2, h3, h4) {
+  margin-top: 1.35em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(h1, h2, h3, h4):first-child {
+  margin-top: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(h1, h2, h3, h4) + :is(p, ul, ol) {
+  margin-top: 0.35em;
+}
+
+/* ---------------------------------------------------------------------------
+   D6. 工具调用行：hover 时才浮出一层水膜
+   ---------------------------------------------------------------------------
+   [data-tool] 是宿主给工具卡片的稳定属性（值是工具名）。它默认完全透明，
+   连续十几次调用时谁也分不清哪一行是「同一次调用」的一部分。这里只做
+   「一行是一行」的边界：行首图标列留白、hover 时整行轻微上浮。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-tool] {
+  border-radius: var(--dsw-radius-sm, 8px);
+  transition:
+    background-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    box-shadow var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-tool]:hover {
+  background: color-mix(in srgb, var(--fh-brand) 6%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--dsw-alias-border-l1) 80%, transparent);
+}
+
+/* 工具状态：失败的一行给一点点红边，成功不额外上色（整页别开花） */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-tool][data-state="error"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-tool][data-state="failed"] {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary, #e05c5c) 7%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   D7. 过程组（「执行 N 次思考，调用 M 次工具」）：数字等宽、hover 有水膜
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-process] {
+  border-radius: var(--dsw-radius-sm, 8px);
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    color var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-process]:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   D8. 输入卡的占位文案：别让它和正文一样亮
+   ---------------------------------------------------------------------------
+   宿主的输入框是 lexical 的 contenteditable（[data-composer-input]），占位语
+   是它后面那个 aria-hidden 的兄弟节点 —— 不是原生 textarea 的 ::placeholder，
+   所以用 ::placeholder 选择器一行都匹配不到（实测 0 命中）。这里按真实结构
+   命中：输入框的紧邻兄弟、且被标成 aria-hidden 的那一层。
+   用 :where() 把前缀特异性压到最低，宿主若把占位做成另一种结构，这条规则
+   自然失效而不会误伤别的东西。
+   ------------------------------------------------------------------------- */
+:where(html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card]) [data-composer-input] + [aria-hidden="true"] {
+  color: var(--dsw-alias-label-tertiary);
+  opacity: 1;
+}

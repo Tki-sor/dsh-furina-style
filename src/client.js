@@ -57,12 +57,6 @@ window.__ModuleLoader__.load({
     const ATTR_MOTION = 'data-dsh-furina-motion';
     /** 背景模式：art / gradient / none。 */
     const ATTR_BG = 'data-dsh-furina-bg';
-    /** 隐藏第三方吉祥物（claude-style 的螃蟹/小鲸鱼）：on / off。 */
-    const ATTR_HIDE_MASCOT = 'data-dsh-furina-hide-mascot';
-    /** 隐藏「封号」彩蛋（claude-style）：on / off。 */
-    const ATTR_HIDE_BAN = 'data-dsh-furina-hide-ban';
-    /** 隐藏桌面宠物（@linxin666/dsh-pet 的鲸鱼娘）：on / off。 */
-    const ATTR_HIDE_PET = 'data-dsh-furina-hide-pet';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -72,9 +66,6 @@ window.__ModuleLoader__.load({
       ATTR_LAYOUT,
       ATTR_MOTION,
       ATTR_BG,
-      ATTR_HIDE_MASCOT,
-      ATTR_HIDE_BAN,
-      ATTR_HIDE_PET,
       ATTR_HANDOFF,
     ];
 
@@ -115,15 +106,12 @@ window.__ModuleLoader__.load({
 
     const PREFS_KEY = 'dsh-furina:prefs';
 
-    /** 默认值：背景用插画；第三方吉祥物/彩蛋/桌宠默认收起来（用户要求）。 */
+    /** 默认值：背景用插画，布局与动效全开。 */
     const PREFS_DEFAULT = Object.freeze({
       background: 'art', // art | gradient | none
       backgroundOpacity: 0.55, // 0..1
       layout: true,
       motion: 'system', // system | on | reduced
-      hideMascot: true,
-      hideBan: true,
-      hidePet: true,
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
@@ -146,10 +134,6 @@ window.__ModuleLoader__.load({
         backgroundOpacity: clampOpacity(input.backgroundOpacity),
         layout: input.layout === undefined ? PREFS_DEFAULT.layout : Boolean(input.layout),
         motion: pickEnum(input.motion, MOTION_MODES, PREFS_DEFAULT.motion),
-        hideMascot:
-          input.hideMascot === undefined ? PREFS_DEFAULT.hideMascot : Boolean(input.hideMascot),
-        hideBan: input.hideBan === undefined ? PREFS_DEFAULT.hideBan : Boolean(input.hideBan),
-        hidePet: input.hidePet === undefined ? PREFS_DEFAULT.hidePet : Boolean(input.hidePet),
       };
     }
 
@@ -297,9 +281,6 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_LAYOUT, prefs.layout && !handoff ? 'on' : 'off');
       setAttr(root, ATTR_MOTION, resolveMotion(prefs.motion));
       setAttr(root, ATTR_BG, prefs.background);
-      setAttr(root, ATTR_HIDE_MASCOT, prefs.hideMascot ? 'on' : 'off');
-      setAttr(root, ATTR_HIDE_BAN, prefs.hideBan ? 'on' : 'off');
-      setAttr(root, ATTR_HIDE_PET, prefs.hidePet ? 'on' : 'off');
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -411,12 +392,6 @@ window.__ModuleLoader__.load({
         motionSystem: '跟随系统',
         motionOn: '开启',
         motionReduced: '减弱',
-        mascotLabel: '隐藏第三方吉祥物',
-        mascotHint: '只对已安装的 dsh-claude-style 的螃蟹/小鲸鱼生效；它没装时这条规则不起作用。',
-        banLabel: '禁用「封号」彩蛋',
-        banHint: '只对已安装的 dsh-claude-style 生效。本主题自己不包含任何彩蛋。',
-        petLabel: '隐藏桌面宠物',
-        petHint: '右下角那只是 dsh-pet 插件的鲸鱼娘，不是本主题带来的；想留着就关掉这项。',
         statusLabel: '当前状态',
         statusOwn: '本主题独立负责配色与布局',
         statusFurina: '皮肤中心正在运行 furina 皮肤，本主题只做修补',
@@ -444,12 +419,6 @@ window.__ModuleLoader__.load({
         motionSystem: 'System',
         motionOn: 'On',
         motionReduced: 'Reduced',
-        mascotLabel: 'Hide third-party mascots',
-        mascotHint: 'Only affects dsh-claude-style crab/whale sprites when that plugin is installed.',
-        banLabel: 'Disable the suspension easter egg',
-        banHint: 'Only affects dsh-claude-style. This theme ships no easter eggs of its own.',
-        petLabel: 'Hide desktop pet',
-        petHint: 'The character in the corner belongs to dsh-pet, not this theme. Turn this off to keep it.',
         statusLabel: 'Status',
         statusOwn: 'This theme owns the colors and layout',
         statusFurina: 'skin-center is running the furina skin; this theme only patches',
@@ -611,37 +580,6 @@ window.__ModuleLoader__.load({
               checked: prefs.layout,
               label: t('layoutLabel'),
               onChange: (value) => patch({ layout: value }),
-            })
-          )
-        ),
-        h(
-          'div',
-          { className: 'fh-set-card' },
-          h(
-            Row,
-            { name: t('mascotLabel'), hint: t('mascotHint') },
-            h(Switch, {
-              checked: prefs.hideMascot,
-              label: t('mascotLabel'),
-              onChange: (value) => patch({ hideMascot: value }),
-            })
-          ),
-          h(
-            Row,
-            { name: t('banLabel'), hint: t('banHint') },
-            h(Switch, {
-              checked: prefs.hideBan,
-              label: t('banLabel'),
-              onChange: (value) => patch({ hideBan: value }),
-            })
-          ),
-          h(
-            Row,
-            { name: t('petLabel'), hint: t('petHint') },
-            h(Switch, {
-              checked: prefs.hidePet,
-              label: t('petLabel'),
-              onChange: (value) => patch({ hidePet: value }),
             })
           )
         ),

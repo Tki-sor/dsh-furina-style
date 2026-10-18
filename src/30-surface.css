@@ -1,21 +1,15 @@
 /* ============================================================================
-   dsh-furina-style — 30. 表面层：背景插画 + 第三方吉祥物/彩蛋的让路
+   dsh-furina-style — 30. 表面层：背景插画
    ----------------------------------------------------------------------------
-   这一节只做两件事，都是「可选、可关、不依赖别人的插件存在」：
+   把芙宁娜的插画作为画布本身画出来，强度由一个 0..1 的变量族
+   （--fh-art-scrim-*）控制（设置面板里的滑块）。
 
-   A. 背景插画：把芙宁娜的插画作为画布底下的一层 fixed 图层画出来，
-      强度由一个 0..1 的变量族（--fh-art-scrim-*）控制（设置面板里的滑块）。
-      只在 surfaces="own" 生效 —— skin-center 的 furina 皮肤在跑时
-      （surfaces="furina"）它自己就有 backgroundMedia 插画，我们绝不叠第二张。
+   只在 surfaces="own" 生效 —— skin-center 的 furina 皮肤在跑时
+   （surfaces="furina"）它自己就有 backgroundMedia 插画，我们绝不叠第二张。
 
-   B. 让路：用户明确不要 claude 风格的吉祥物和「封号」彩蛋，也不要桌面宠物。
-      这些都不是本插件的代码：
-        - 吉祥物 / 封号彩蛋 → 已装的第三方插件 dsh-claude-style
-          （.dsh-claude-crab / .dsh-claude-deepy / .dsh-claude-ban）
-        - 桌面宠物（鲸鱼娘） → 已装的第三方插件 @linxin666/dsh-pet
-          （[data-dsh-pet-root] / [data-pet-dock]）
-      我们只写「隐藏」规则，不碰它们的 DOM，也不 import 它们。
-      选择器匹配不到时整条规则零副作用，所以那些插件没装 / 改名都不会出错。
+   本节不隐藏、不干预任何第三方插件的 DOM：主题只负责自己的表面。
+   （0.2.0 曾提供「隐藏第三方吉祥物 / 封号彩蛋 / 桌宠」三个开关，0.3.0 起移除：
+     主题不该替别的插件做内容策略。）
    ========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -113,32 +107,4 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="gradie
 /* 纯色画布：既不要插画也不要渐变 */
 html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="none"] body {
   background-image: none;
-}
-
-/* ---------------------------------------------------------------------------
-   B. 隐藏第三方吉祥物 / 封号彩蛋（claude-style）
-   ---------------------------------------------------------------------------
-   用属性前缀选择器而不是它的 CSS module 类名：dsh-claude-* 是它自己声明的
-   语义类，跨版本比 _xxxxxx_ 形式的哈希类名稳得多。
-   ------------------------------------------------------------------------- */
-
-html[data-dsh-furina][data-dsh-furina-hide-mascot="on"] [class*="dsh-claude-crab"],
-html[data-dsh-furina][data-dsh-furina-hide-mascot="on"] [class*="dsh-claude-deepy"] {
-  display: none !important;
-}
-
-html[data-dsh-furina][data-dsh-furina-hide-ban="on"] [class*="dsh-claude-ban"] {
-  display: none !important;
-}
-
-/* ---------------------------------------------------------------------------
-   C. 隐藏桌面宠物（@linxin666/dsh-pet 的鲸鱼娘）
-   ---------------------------------------------------------------------------
-   [data-dsh-pet-root] 是它自带的语义根属性；[data-pet-dock] 是内部 dock。
-   两个都写上，任意一个存在就能收掉，不会剩半个残影。
-   ------------------------------------------------------------------------- */
-
-html[data-dsh-furina][data-dsh-furina-hide-pet="on"] [data-dsh-pet-root],
-html[data-dsh-furina][data-dsh-furina-hide-pet="on"] [data-pet-dock] {
-  display: none !important;
 }
