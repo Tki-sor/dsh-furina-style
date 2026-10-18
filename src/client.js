@@ -61,6 +61,8 @@ window.__ModuleLoader__.load({
     const ATTR_RAIL = 'data-dsh-furina-rail';
     /** 状态细节开关：on / off（给宿主状态行补一句「在做什么」）。 */
     const ATTR_STATUS = 'data-dsh-furina-status';
+    /** 引用块底色：water / pearl / neutral / none。 */
+    const ATTR_QUOTE = 'data-dsh-furina-quote';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -72,6 +74,7 @@ window.__ModuleLoader__.load({
       ATTR_BG,
       ATTR_RAIL,
       ATTR_STATUS,
+      ATTR_QUOTE,
       ATTR_HANDOFF,
     ];
 
@@ -121,10 +124,19 @@ window.__ModuleLoader__.load({
       motion: 'system', // system | on | reduced
       rail: true, // 对话导航条（右侧短横线）
       status: true, // 状态行细节（在宿主那行后面补「在做什么」）
+      imageUser: 240, // px —— 我发送的图片最大高度
+      imageAssistant: 360, // px —— AI 发送的图片最大高度（宿主默认也是 360）
+      quoteTint: 'water', // water | pearl | neutral | none
+      quoteAlpha: 0.32, // 0..0.8 —— 引用块底色浓度
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
     const MOTION_MODES = ['system', 'on', 'reduced'];
+    const QUOTE_TINTS = ['water', 'pearl', 'neutral', 'none'];
+
+    /** 图片高度的可调范围（px）。上限比下限宽，因为横图竖图差别大。 */
+    const IMAGE_USER_RANGE = [100, 480];
+    const IMAGE_ASSISTANT_RANGE = [120, 600];
 
     function clampOpacity(value) {
       const n = typeof value === 'number' ? value : Number(value);
@@ -137,6 +149,20 @@ window.__ModuleLoader__.load({
       const n = typeof value === 'number' ? value : Number(value);
       if (!Number.isFinite(n)) return PREFS_DEFAULT.veil;
       return Math.min(1, Math.max(0, Math.round(n * 100) / 100));
+    }
+
+    /** 图片高度：整数 px，超出范围收敛到边界。 */
+    function clampPx(value, range, fallback) {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.round(Math.min(range[1], Math.max(range[0], n)));
+    }
+
+    /** 引用块浓度：0..0.8，两位小数。 */
+    function clampQuoteAlpha(value) {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return PREFS_DEFAULT.quoteAlpha;
+      return Math.min(0.8, Math.max(0, Math.round(n * 100) / 100));
     }
 
     function pickEnum(value, allowed, fallback) {
@@ -153,6 +179,14 @@ window.__ModuleLoader__.load({
         motion: pickEnum(input.motion, MOTION_MODES, PREFS_DEFAULT.motion),
         rail: input.rail === undefined ? PREFS_DEFAULT.rail : Boolean(input.rail),
         status: input.status === undefined ? PREFS_DEFAULT.status : Boolean(input.status),
+        imageUser: clampPx(input.imageUser, IMAGE_USER_RANGE, PREFS_DEFAULT.imageUser),
+        imageAssistant: clampPx(
+          input.imageAssistant,
+          IMAGE_ASSISTANT_RANGE,
+          PREFS_DEFAULT.imageAssistant
+        ),
+        quoteTint: pickEnum(input.quoteTint, QUOTE_TINTS, PREFS_DEFAULT.quoteTint),
+        quoteAlpha: clampQuoteAlpha(input.quoteAlpha),
       };
     }
 
@@ -302,6 +336,7 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_BG, prefs.background);
       setAttr(root, ATTR_RAIL, prefs.rail ? 'on' : 'off');
       setAttr(root, ATTR_STATUS, prefs.status ? 'on' : 'off');
+      setAttr(root, ATTR_QUOTE, prefs.quoteTint);
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -313,6 +348,19 @@ window.__ModuleLoader__.load({
       }
       // 正文水膜浓度：CSS 只读这一个变量，0 = 完全透明。
       root.style.setProperty('--fh-veil', String(clampVeil(prefs.veil)));
+      // 图片最大高度与引用块浓度：同样只写变量，样式表里取值。
+      root.style.setProperty(
+        '--fh-img-user-h',
+        clampPx(prefs.imageUser, IMAGE_USER_RANGE, PREFS_DEFAULT.imageUser) + 'px'
+      );
+      root.style.setProperty(
+        '--fh-img-ai-h',
+        clampPx(prefs.imageAssistant, IMAGE_ASSISTANT_RANGE, PREFS_DEFAULT.imageAssistant) + 'px'
+      );
+      root.style.setProperty(
+        '--fh-quote-alpha',
+        Math.round(clampQuoteAlpha(prefs.quoteAlpha) * 100) + '%'
+      );
     }
 
     /* ------------------------------------------------------------------ */
@@ -703,6 +751,9 @@ window.__ModuleLoader__.load({
         for (const attr of ALL_ATTRS) root.removeAttribute(attr);
         for (const name of ART_SCRIM_VARS) root.style.removeProperty(name);
         root.style.removeProperty('--fh-veil');
+        root.style.removeProperty('--fh-img-user-h');
+        root.style.removeProperty('--fh-img-ai-h');
+        root.style.removeProperty('--fh-quote-alpha');
       };
     }
 
@@ -746,6 +797,18 @@ window.__ModuleLoader__.load({
         phaseTool: '调用工具',
         phaseWrite: '正在写回答',
         phaseStall: '暂未响应',
+        imageUserLabel: '我发送的图片',
+        imageUserHint: '聊天记录里你自己发出去的图最大多高。觉得占地方就调小。',
+        imageAssistantLabel: 'AI 发送的图片',
+        imageAssistantHint: '助手回复里插入的图最大多高（宿主默认 360px）。',
+        quoteLabel: '引用块',
+        quoteHint: '正文里「> 引用」那一段的底色。水色最贴合这套皮肤，嫌抢眼可以换更淡的或直接关掉。',
+        quoteWater: '水色',
+        quotePearl: '珍珠',
+        quoteNeutral: '中性',
+        quoteNone: '关闭',
+        quoteAlphaLabel: '引用块浓度',
+        quoteAlphaHint: '引用块底色的深浅。调到 0 就只剩左边的竖线。',
         reset: '恢复默认',
         on: '开',
         off: '关',
@@ -783,6 +846,18 @@ window.__ModuleLoader__.load({
         phaseTool: 'running tool',
         phaseWrite: 'writing a reply',
         phaseStall: 'no response yet',
+        imageUserLabel: 'Images I send',
+        imageUserHint: 'Maximum height for images you sent. Lower it if they take too much room.',
+        imageAssistantLabel: 'Images from the assistant',
+        imageAssistantHint: 'Maximum height for images in assistant replies (host default is 360px).',
+        quoteLabel: 'Blockquote',
+        quoteHint: 'Tint behind “>” quotes. Water matches the skin best; pick a softer one or turn it off.',
+        quoteWater: 'Water',
+        quotePearl: 'Pearl',
+        quoteNeutral: 'Neutral',
+        quoteNone: 'Off',
+        quoteAlphaLabel: 'Blockquote strength',
+        quoteAlphaHint: 'How strong the blockquote tint is. At 0 only the left rule remains.',
         reset: 'Reset',
         on: 'On',
         off: 'Off',
@@ -977,6 +1052,67 @@ window.__ModuleLoader__.load({
               label: t('statusDetailLabel'),
               onChange: (value) => patch({ status: value }),
             })
+          ),
+          h(
+            Row,
+            { name: t('imageUserLabel'), hint: t('imageUserHint') },
+            h('input', {
+              className: 'fh-set-range',
+              type: 'range',
+              min: IMAGE_USER_RANGE[0],
+              max: IMAGE_USER_RANGE[1],
+              step: 20,
+              value: prefs.imageUser,
+              'aria-label': t('imageUserLabel'),
+              onChange: (event) => patch({ imageUser: Number(event.target.value) }),
+            }),
+            h('span', { className: 'fh-set-value' }, prefs.imageUser + 'px')
+          ),
+          h(
+            Row,
+            { name: t('imageAssistantLabel'), hint: t('imageAssistantHint') },
+            h('input', {
+              className: 'fh-set-range',
+              type: 'range',
+              min: IMAGE_ASSISTANT_RANGE[0],
+              max: IMAGE_ASSISTANT_RANGE[1],
+              step: 20,
+              value: prefs.imageAssistant,
+              'aria-label': t('imageAssistantLabel'),
+              onChange: (event) => patch({ imageAssistant: Number(event.target.value) }),
+            }),
+            h('span', { className: 'fh-set-value' }, prefs.imageAssistant + 'px')
+          ),
+          h(
+            Row,
+            { name: t('quoteLabel'), hint: t('quoteHint') },
+            h(Segmented, {
+              label: t('quoteLabel'),
+              value: prefs.quoteTint,
+              options: [
+                { value: 'water', label: t('quoteWater') },
+                { value: 'pearl', label: t('quotePearl') },
+                { value: 'neutral', label: t('quoteNeutral') },
+                { value: 'none', label: t('quoteNone') },
+              ],
+              onChange: (value) => patch({ quoteTint: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('quoteAlphaLabel'), hint: t('quoteAlphaHint') },
+            h('input', {
+              className: 'fh-set-range',
+              type: 'range',
+              min: 0,
+              max: 80,
+              step: 4,
+              value: Math.round(prefs.quoteAlpha * 100),
+              disabled: prefs.quoteTint === 'none',
+              'aria-label': t('quoteAlphaLabel'),
+              onChange: (event) => patch({ quoteAlpha: Number(event.target.value) / 100 }),
+            }),
+            h('span', { className: 'fh-set-value' }, Math.round(prefs.quoteAlpha * 100) + '%')
           )
         ),
         h(

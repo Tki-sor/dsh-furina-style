@@ -242,3 +242,107 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
   button:hover {
   color: var(--dsw-alias-label-primary);
 }
+
+/* ----------------------------------------------------------------------------
+   P8 代码块：宿主给了 banner 条和复制按钮，但两者都没主题化
+   ----------------------------------------------------------------------------
+   实测（live）：`.md-code-block` 720x182、radius 16、底色 rgb(21 29 48)；
+   里面两层 —— banner 条 720x36 底色 rgb(16 22 36) 圆角 16/16/0/0，只有右侧
+   一颗「复制」按钮（22px 宽、透明底、radius 0、11px 字）；正文 pre 720x146、
+   radius 12、padding 16、11px 等宽字体、overflow auto。
+
+   宿主自己把 banner 和正文画成两种灰，但复制按钮完全裸奔（无圆角、无悬停）。
+   这里只做三件事：把 banner 和正文的交界做成同一条水线、给复制按钮补手感、
+   给正文 pre 的横向滚动条让出呼吸空间。
+   锚点全用宿主公开的 data-code-block-*（banner / content），不碰 hash 类名。
+   -------------------------------------------------------------------------- */
+
+/* banner 与正文之间：一条水色发丝线，而不是两块灰硬拼。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-code-block-banner="true"] {
+  border-bottom: 0.5px solid
+    color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+}
+
+/* 复制按钮：太小、没圆角、没有悬停反馈。悬停时浮出一层水膜。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-code-block-banner="true"]
+  button {
+  border-radius: var(--dsw-radius-xs, 4px);
+  padding: 0 6px;
+  min-height: 18px;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-code-block-banner="true"]
+  button:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 18%,
+    transparent
+  );
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 正文区：宿主把 overflow:auto 挂在 pre 上，横向滚动条贴着圆角切边。
+   给外层 content 一句 padding，让滚动条落在圆角内侧。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-code-block-content="true"] {
+  padding-bottom: 2px;
+}
+
+/* ----------------------------------------------------------------------------
+   P9 对话内的「重试 / 中断」行
+   ----------------------------------------------------------------------------
+   实测（live）：这两类行是 `[data-chat-flow-kind="turn-error"]`（720x44，
+   透明底、无圆角、16px 正文色）和 `[data-chat-flow-kind="model-retry"]`
+   （720x24，一个 DETAILS 元素）。它们复用正文容器 `.ydEAna_follow` 和
+   `.Mhu9Iq_surface`，所以行为上已经完全跟随主题；但视觉上它们是「正文的
+   一部分」，读者很难分出这是一条系统提示而不是模型说的话。
+
+   这里给容器叠一层极淡的暖色/水色膜，让它读起来是「页边批注」而不是正文。
+   锚点用 data-chat-flow-kind（公开的、稳定的流程语义），不用 hash 类名。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-chat-flow-kind="turn-error"] {
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-error-primary, #cf4b4b) 7%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(
+      in srgb,
+      var(--dsw-alias-state-error-primary, #cf4b4b) 22%,
+      transparent
+    );
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-chat-flow-kind="model-retry"] {
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-state-warn-primary, #d9a94f) 6%,
+    transparent
+  );
+  box-shadow: inset 0 0 0 0.5px
+    color-mix(
+      in srgb,
+      var(--dsw-alias-state-warn-primary, #d9a94f) 18%,
+      transparent
+    );
+}
+
+/* 两行的正文都是 16px 继承值，比周围的 14px 正文大一号；压回 13px 让它们
+   读起来像注释。`:not(button)` 是因为 retry 行是 <details>，其内部还有按钮。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  :is([data-chat-flow-kind="turn-error"], [data-chat-flow-kind="model-retry"])
+  :is(span, div):not(:has(*)) {
+  font-size: 13px;
+  line-height: 20px;
+}

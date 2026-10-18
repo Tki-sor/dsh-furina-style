@@ -310,10 +310,12 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat
   letter-spacing: 0.01em;
 }
 
+/* 引用块：底色取自 [data-dsh-furina-quote] 选的颜色，浓度取自 --fh-quote-alpha。
+   竖线固定用品牌蓝——它在亮/暗两套里都成立，用户换底色时不至于丢强调。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] blockquote {
-  border-inline-start: 2px solid color-mix(in srgb, var(--fh-brand) 46%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4a5fa8) 52%, transparent);
   border-radius: 0 var(--dsw-radius-sm) var(--dsw-radius-sm) 0;
-  background: color-mix(in srgb, var(--fh-brand-wash) 42%, transparent);
+  background: color-mix(in srgb, var(--fh-quote-tint, transparent) var(--fh-quote-alpha, 32%), transparent);
   padding: 8px 14px;
 }
 
@@ -321,3 +323,28 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat
   width: max-content;
   min-width: 100%;
 }
+
+/* ============================================================================
+   L10. 图片显示大小
+   ----------------------------------------------------------------------------
+   两处图片的尺寸由用户偏好决定（设置页「我发送的图片 / AI 发送的图片」）：
+
+   1. 我发送的图片 —— 由我们自己 vendored 的 dsh-easyrewrite 补丁渲染，
+      容器是 [data-dsh-easyrewrite="user-images"]，图是 img[data-dbe-msg-image]，
+      它自带内联 style="max-height:280px"，所以这里必须 !important 才压得住。
+      这是本插件自己参与产出的容器（补丁即出自我们），不算「改第三方插件的 DOM」。
+   2. AI 发送的图片 —— 宿主 ui-chat 渲染：button[class*="_imageButton_"]
+      > img[class*="_image_"]，宿主给的是 max-height:360px / max-width:min(100%,640px)。
+      选择器用 class 子串锚定（_imageButton_ / _image_ 是 CSS-module 里的人写部分，
+      哈希后缀会随构建变），避免绑死 1ypvv 这类构建哈希。
+
+   --fh-img-user-h / --fh-img-ai-h 由 client.js 按偏好写进 <html> 的内联变量。
+   ========================================================================== */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dsh-easyrewrite="user-images"] img[data-dbe-msg-image] {
+  max-height: var(--fh-img-user-h, 240px) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] button[class*="_imageButton_"] img {
+  max-height: var(--fh-img-ai-h, 360px);
+}
+

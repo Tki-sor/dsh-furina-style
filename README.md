@@ -28,6 +28,41 @@
 > 主题只负责自己的表面，不替别的插件做内容策略。
 > **0.4.1 起**：精修层 + 对话导航条 + 运行状态细节三件套；正文水膜浓度可调；
 > Windows 右上角那三个原生窗口按钮不再是黑底。
+> **0.5.0 起**：图片显示大小（你发的 / AI 发的分别可调）、引用块底色四档色调
+> 与浓度都可调；精修层补到 P9（代码块 banner、对话里的「重试 / 中断」行）。
+
+### 0.5.0 做了什么
+
+- **图片显示大小可调**（设置 →「我发送的图片」/「AI 发送的图片」）：两处图片走的是
+  完全不同的渲染路径，所以给两个滑块而不是一个。
+  - 你发的图由本插件参与维护的 `dsh-easyrewrite` 补丁渲染
+    （`[data-dsh-easyrewrite="user-images"] img[data-dbe-msg-image]`），它自带内联
+    `max-height:280px`，所以主题这边必须 `!important` 才压得住。默认从 280 收到
+    **240px**（之前反馈「我发的图看着偏大」）。
+  - AI 回复里插入的图由宿主 `ui-chat` 渲染（`button[class*="_imageButton_"] img`），
+    宿主给的是 `max-height:360px / max-width:min(100%,640px)`，默认 **360px** 保持原样。
+  - 取值范围 100–480 / 120–600，step 20。锚点用 CSS-module 类名的**子串**
+    （`_imageButton_` 是人写部分，`1ypvv` 那样的哈希会随宿主构建变）。
+- **引用块底色可调**（设置 →「引用块」+「引用块浓度」）：暗色下原来那块
+  `--fh-brand-wash` 42% 的亮色水膜会泛成一块奶白，非常突兀。现在改成
+  四档色调（**水色** `#263353` / **珍珠** `#2c3a5e` / **中性** `#dbe2f2` / **关闭**）
+  × 浓度 0–80%，竖线改用 `--dsw-alias-brand-primary` 半透明，不再跟着底色走。
+  默认水色 + 32%（原来 42%）。
+- **顺带修掉同源的泛白**：暗色块补了 `--fh-brand-wash: #263353` 与
+  `--fh-pearl: #2c3a5e` 的覆盖 —— 之前这两个 token 在暗色下仍是亮色值，
+  导致动效里的环境光斑、表头水膜也一起泛白。
+- **精修层补两段**（`src/15-polish.css`，P8–P9）：
+  - **P8 代码块**：宿主把 banner 条和正文 `pre` 画成两种灰硬拼，中间没有分隔；
+    复制按钮完全裸奔（无圆角、无悬停）。这里补一条 0.5px 水色发丝线、
+    复制按钮的圆角/内距/悬停水膜。
+  - **P9 重试与中断行**：`[data-chat-flow-kind="turn-error"]` 与
+    `[data-chat-flow-kind="model-retry"]` 这两类行宿主完全没主题化
+    （透明底、16px 正文色）。改成错误 7% / 警告 6% 的淡底 + 0.5px 内描边，
+    字号压到 13px。
+- **测试方式改了**：这版起不再在用户正在用的那个实例里做验证，而是用
+  `DSH_HOME=C:\Users\11515\.dsh-test` 起一个独立的
+  `dsh --profile furina-test web --no-open --port 5177`，
+  再用 headless Edge 的 CDP 驱动探针。原因写在 `docs/DESIGN.md` 的 §8.3。
 
 ### 0.4.1 做了什么
 
@@ -99,6 +134,22 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
 
 `lib/client.js` 是产物（顶部有 GENERATED 标记），不要手改。构建完记得重启应用。
 
+### 在隔离实例里测试（不打扰自己正在用的那个）
+
+从 0.5.0 起，验证不在日常实例里做，而是另起一个 home：
+
+```bash
+export DSH_HOME='C:\Users\11515\.dsh-test'
+"<...>/resources/runtime/cli/bin/dsh.cmd" --profile furina-test --no-open --port 5177
+```
+
+`C:\Users\11515\.dsh-test\profiles\node_modules` 是一个 junction，指回真实
+`.dsh\profiles\node_modules`（靠 Node 的向上查找拿到 `@deepseek-ai/*` 全家桶，
+不必装第二份 1.1 GB）；`profiles\furina-test\node_modules` 里只有两个 junction
+指向本仓库和 `dsh-easyrewrite-patched` 的源码目录，所以**改完源码重新 build，
+重启这个实例就能看到，完全不影响桌面里那个**。探针用 headless Edge +
+`--remote-debugging-port=9333` 走 CDP，不需要抢焦点、不需要点 DevTools。
+
 ---
 
 ## 设置
@@ -115,8 +166,13 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
 | 布局微调 | 开 / 关 | 输入卡圆角与投影、对话列宽、会话头分隔线、精修层 |
 | 对话导航 | 开 / 关 | 右侧短横线（宿主 TurnNavigator）的上色与 `Alt+↑/↓` 跳轮 |
 | 运行状态细节 | 开 / 关 | 运行行末尾那枚「调用工具 / 正在写回答 / 暂未响应」小胶囊 |
+| 我发送的图片 | 100 – 480 px | 你自己发出去的图最大多高。默认 240 |
+| AI 发送的图片 | 120 – 600 px | 助手回复里插入的图最大多高。默认 360（= 宿主原值） |
+| 引用块 | 水色 / 珍珠 / 中性 / 关闭 | 正文 `> 引用` 那段的底色色调。默认水色 |
+| 引用块浓度 | 0% – 80% | 引用块底色的深浅，0 = 只剩左边竖线。默认 32% |
 
 「插画强度」和「内容遮罩」只在背景 = 插画时可调（其它模式的画布是纯 CSS 渐变）。
+「引用块浓度」在色调选「关闭」时自动变灰。
 
 底部还有一行「当前状态」，显示此刻是谁在负责表面（独立 / 修补芙宁娜皮肤 /
 让路给其它皮肤 / 让路给 claude-style），以及一个「恢复默认」。
@@ -133,12 +189,18 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
   "layout": true,
   "motion": "system",
   "rail": true,
-  "status": true
+  "status": true,
+  "imageUser": 240,
+  "imageAssistant": 360,
+  "quoteTint": "water",
+  "quoteAlpha": 0.32
 }
 ```
 
-`veil`（内容遮罩）允许 0，其余百分比类的下限都是 0.1；不认识的键在读入时丢弃，
-缺的键补默认值。0.4.1 之前存的配置没有 `veil` / `rail` / `status`，读入时自动补上。
+`veil`（内容遮罩）与 `quoteAlpha` 允许 0，其余百分比类的下限都是 0.1；不认识的键在
+读入时丢弃，缺的键补默认值。0.4.1 之前存的配置没有 `veil` / `rail` / `status`，
+0.4.1 之后、0.5 之前存的配置没有 `imageUser` / `imageAssistant` / `quoteTint` /
+`quoteAlpha`，读入时都会自动补上。
 
 0.1.0 只存过 `dsh-furina:motion`，升级时会自动迁移一次，然后删掉旧键。
 读不到 localStorage（隐私模式、禁用存储）时全部回落到内置默认值，不报错。
@@ -165,6 +227,7 @@ DSH 的 skin-center 皮肤包（`skin.json` + `skin.css` + `patches.css`）是**
 | 跟随系统 reduced-motion | 部分 | ✅（属性门控 + 媒体查询双保险） |
 | 补运行态细节（在做什么 / 卡住了） | ❌ | ✅（读宿主运行行，不替换它的文本） |
 | 改原生窗口按钮（`titleBarOverlay`） | ❌ | ✅（压宿主 preload 的探针采样色） |
+| 可调图片显示大小 / 引用块色调 | ❌ | ✅（settings.section 里的滑块与分段控件） |
 | 卸载后保证零残留 | ✅ | ✅（`ctx.effect` 清理） |
 
 ### 三种表面模式
@@ -251,8 +314,8 @@ dsh-furina-style/
 │   └── furina-art-1440.jpg   # 内置背景插画（构建时转 data URI）
 ├── src/
 │   ├── 00-tokens.css     # 设计令牌 + 三种表面模式的配色
-│   ├── 10-layout.css     # 布局（L1–L9）
-│   ├── 15-polish.css     # 精修层（P1–P7，宿主已画但对的地方补质感）
+│   ├── 10-layout.css     # 布局（L1–L10，含图片显示大小）
+│   ├── 15-polish.css     # 精修层（P1–P9，宿主已画但对的地方补质感）
 │   ├── 20-motion.css     # 动效（M1–M11）
 │   ├── 30-surface.css    # 背景插画层 + 让容器背景透明 + 正文水膜
 │   ├── 40-settings.css   # 设置面板样式（.fh-set-*）

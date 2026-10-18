@@ -22,6 +22,13 @@ html[data-dsh-furina] {
   --fh-pearl: #c3cfee;
   --fh-pearl-ghost: #a5b7e2;
 
+  /* ---- 引用块可选的三种底色（暗色块里另有覆盖） ----
+     颜色由 [data-dsh-furina-quote] 选择，浓度由 --fh-quote-alpha 控制
+     （JS 把 0..80 的偏好写成百分比字符串）。水色是默认。 */
+  --fh-quote-water: var(--fh-brand-wash);
+  --fh-quote-pearl: var(--fh-pearl);
+  --fh-quote-neutral: #2c3a73;
+
   /* ---- 水面：画布与层级（暗色另有覆盖） ---- */
   --fh-canvas: #eef2fa;
   --fh-surface-base: #f7f9fe;
@@ -181,6 +188,27 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body {
   --dsw-elevation-prominent: 0 0 0 0.5px #2c3a733d, 0 8px 28px 0 #2c3a731a, 0 0 24px 0 #2c3a7310;
 }
 
+/* 引用块底色选择：JS 把偏好写成 html 上的属性，颜色交给 CSS（暗色自动换深色版）。
+   注意声明在 body 上而不是 html 上：--fh-quote-tint 引用 --fh-quote-water，
+   而暗色版 --fh-quote-water 是在 body[data-ds-dark-theme] 上覆盖的。
+   若在 html 上声明，var() 会在 html 处就以亮色值完成替换，
+   到 body 再改 --fh-quote-water 已经来不及。挂在 body 上就能取到暗色值。 */
+html[data-dsh-furina][data-dsh-furina-quote="water"] body {
+  --fh-quote-tint: var(--fh-quote-water);
+}
+
+html[data-dsh-furina][data-dsh-furina-quote="pearl"] body {
+  --fh-quote-tint: var(--fh-quote-pearl);
+}
+
+html[data-dsh-furina][data-dsh-furina-quote="neutral"] body {
+  --fh-quote-tint: var(--fh-quote-neutral);
+}
+
+html[data-dsh-furina][data-dsh-furina-quote="none"] body {
+  --fh-quote-tint: transparent;
+}
+
 /* 自有表面：画布背景（水光渐变，随暗色切换） */
 html[data-dsh-furina][data-dsh-furina-surfaces="own"] body {
   background-color: var(--fh-canvas);
@@ -195,6 +223,16 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body {
    2. 自有表面：暗色（独立设计，不是把亮色压暗）
    ========================================================================== */
 html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
+  /* 引用块底色：暗色必须换成深色，沿用亮色淡紫会在深底上发白（用户圈出的「违和」）。 */
+  --fh-quote-water: #263353;
+  --fh-quote-pearl: #2c3a5e;
+  --fh-quote-neutral: #dbe2f2;
+
+  /* 同理：--fh-brand-wash 是亮色调，暗色下被 motion 光晕 / 表头水膜引用，
+     会在深底上泛白。这里给出暗色对应值。 */
+  --fh-brand-wash: #263353;
+  --fh-pearl: #2c3a5e;
+
   --fh-canvas: #0c1220;
   --fh-surface-base: #101624;
   --fh-surface-1: #161f33;
@@ -298,6 +336,12 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
    失效 / tooltip 暖黄撞色 / 边框过淡），不覆盖它自己的画布与背景插画。
    ========================================================================== */
 html[data-dsh-furina][data-dsh-furina-surfaces="furina"] body {
+  /* 引用块底色：修补模式不知道 skin-center 那套画布的具体明暗，
+     用两边都不出错的半透明墨蓝，靠 --fh-quote-alpha 控浓度。 */
+  --fh-quote-water: #2c3a73;
+  --fh-quote-pearl: #4a5fa8;
+  --fh-quote-neutral: #1d2539;
+
   /* 面板层：alpha 单调递增且足够不透明，正文才读得清 */
   --dsw-alias-bg-base: rgba(232, 236, 245, 0.82);
   --dsw-alias-bg-layer-1: rgba(243, 245, 251, 0.94);
@@ -334,6 +378,10 @@ html[data-dsh-furina][data-dsh-furina-surfaces="furina"] body {
 }
 
 html[data-dsh-furina][data-dsh-furina-surfaces="furina"] body[data-ds-dark-theme] {
+  --fh-quote-water: #263353;
+  --fh-quote-pearl: #2c3a5e;
+  --fh-quote-neutral: #dbe2f2;
+
   --dsw-alias-bg-base: rgba(16, 22, 42, 0.86);
   --dsw-alias-bg-layer-1: rgba(26, 34, 56, 0.94);
   --dsw-alias-bg-layer-2: rgba(38, 49, 75, 0.95);

@@ -238,7 +238,7 @@ Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 
 
 ### 7.5 精修层：只在「宿主画对了、但不到位」的地方动手
 
-`src/15-polish.css`（P1–P7）不新增结构、不改几何，只补质感。两条纪律：
+`src/15-polish.css`（P1–P9）不新增结构、不改几何，只补质感。两条纪律：
 
 - **亮色规则必须写 `body:not([data-ds-dark-theme])`**：`data-ds-dark-theme` 挂在
   `body` 上，写在 `<html>` 上的 `:not()` 永远为真 —— 开发期那版会话头因此把暗色界面
@@ -248,7 +248,88 @@ Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 
 
 ---
 
-## 8. 版本之间
+## 8. 0.5.0：两处「用户能看见但宿主不管」的尺寸与颜色
+
+### 8.1 图片大小：两条渲染路径，所以两个滑块
+
+同一个聊天流里的图，**来源不同、渲染方也不同**：
+
+| 谁发的 | 渲染方 | DOM 锚点 | 原始约束 |
+| --- | --- | --- | --- |
+| 用户 | 本插件 vendored 的 `dsh-easyrewrite` 补丁 | `[data-dsh-easyrewrite="user-images"] img[data-dbe-msg-image]` | 内联 `max-height:280px` |
+| 助手 | 宿主 `@deepseek-ai/dsh-client-ui-chat` | `button[class*="_imageButton_"] img` | `max-height:360px; max-width:min(100%,640px)` |
+
+两个关键差异决定了写法：
+
+- **用户图必须 `!important`**：补丁给的是**内联** `style="max-height:280px"`，
+  非 important 的内联样式优先级高于任何选择器，只能用 `!important` 压。
+  （也可以改补丁让它读 CSS 变量，但那意味着再维护一个包、再多一次重启；主题侧
+  `!important` 是更小的一步。这个容器本来就出自本插件参与的补丁，不算「改第三方 DOM」。）
+- **助手图不能 `!important`**：宿主用的是 class 选择器（`.` 特异性 0,1,0），我们
+  的 `html[data-*][data-*] [data-slot=…] button[class*=…] img` 已经是 (0,3,2)，
+  不用 !important 就压得住；少一个 !important 就少一个将来宿主改结构时打架的点。
+- **锚点用 class 的「子串」而不是全名**：`_imageButton_1ypvv_446` 里 `1ypvv` 是
+  构建哈希（宿主每次构建都变），`_imageButton_` 才是人写的那半。所以写
+  `[class*="_imageButton_"]`。这是本插件第二次用子串匹配（第一次是
+  `[class*="_frame"]`），两处都写清了理由。
+
+默认值：用户图 240（原来是 280，反馈偏大）、助手图 360（= 宿主原值，不动）。
+范围 100–480 / 120–600、step 20 —— 太小会看不清，太大会把整屏挤掉。
+
+### 8.2 引用块：颜色分层一定要在 `body` 上做
+
+改动前：`background: color-mix(in srgb, var(--fh-brand-wash) 42%, transparent)`。
+`--fh-brand-wash` 是 `#dce3f7`（淡薰衣草），**只在亮色块里声明过，暗色块漏了**。
+于是暗色界面里那块引用是「42% 的亮色水膜压在深底上」＝ 一块泛白的奶灰，
+用户第一眼就觉得违和。
+
+修法不是把这个 token 调暗了事（`--fh-brand-wash` 还被表头水膜、动效环境光斑用），
+而是**给引用块单独分一层颜色**：
+
+- `data-dsh-furina-quote` 四档（`water` / `pearl` / `neutral` / `none`）写在 `<html>`；
+- 具体色值 `--fh-quote-tint` 由 `html[data-dsh-furina][data-dsh-furina-quote="…"] body`
+  规则给出；
+- 浓度 `--fh-quote-alpha` 由 JS 写内联变量；CSS 里
+  `color-mix(in srgb, var(--fh-quote-tint) var(--fh-quote-alpha, 32%), transparent)`。
+
+**为什么定色规则要挂在 `body` 而不是 `<html>`**：这是本设计里最容易踩的一个坑。
+`--fh-quote-water` 的定义是 `var(--fh-brand-wash)`，而 `--fh-brand-wash` 的暗色值
+覆盖在 `body[data-ds-dark-theme]` 上。CSS 自定义属性的 `var()` 是在**声明它的那个
+元素**上完成替换的：如果 `--fh-quote-tint: var(--fh-quote-water)` 写在 `<html>` 上，
+替换时读到的就是亮色值（那时还没走到 body），传到 body 已经晚了。把定色规则整体挪到
+`body` 上，它就能读到 body 自己的暗色覆盖。
+
+顺带修掉同源泛白：暗色块补了 `--fh-brand-wash:#263353` 和 `--fh-pearl:#2c3a5e`。
+这两处之前也是「暗色下沿用亮色值」，只是影响面小（表头水膜 26%、动效光斑 34%），
+没人注意到。
+
+### 8.3 为什么要另起一个实例测试
+
+之前每个版本都是在用户正在用的桌面实例里 `location.reload()` 验证的。问题是：
+
+- 本插件是**构建产物缓存**的（见 §6「已知取舍」第 6 条），每次 rebuild 都要完整重启应用才能加载新
+  代码；而在用户正在用的实例里重启，会把人家正在跑的任务打断。
+- DevTools 探针要靠点坐标（`evaljs4.ps1` 点 Console 提示行）和剪贴板回读，
+  窗口一移动就失效，还得反复抢焦点。
+
+0.5.0 起换成隔离测试：
+
+- `DSH_HOME=C:\Users\11515\.dsh-test`，profile 名 `furina-test`，只加载
+  `dsh-base` + `dsh-web-app` + `dsh-furina-style`（+ vendored `dsh-easyrewrite`），
+  不装 claude-style / 皮肤中心 / pet / memsearch，干扰面最小；
+- `profiles\node_modules` 用 junction 指回真实 `.dsh\profiles\node_modules`，
+  避免再复制 1.1 GB；
+- 探针走 headless Edge 的 CDP（`--remote-debugging-port=9333`），
+  `Runtime.evaluate` 直接拿返回值，不需要剪贴板、不需要焦点。截图用
+  `Page.captureScreenshot`。
+
+**踩过的坑**：`ln -s` 在 Git-Bash on Windows 上对目录会退化成**复制**（一次
+1.1 GB）；必须用 `cmd //c "mklink /J <绝对目标> <绝对源>"`，且两个参数都必须是
+绝对路径（相对路径报「系统找不到指定的路径」）。
+
+---
+
+## 9. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -256,3 +337,4 @@ Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 
 | 0.2.0 | 设置进 DeepSeek 设置界面、默认插画背景、修输入框悬空 |
 | 0.3.0 | 细节层（代码/表格/工具行/占位）；删掉三个「替别的插件做内容策略」的开关 |
 | 0.4.1 | 精修层、宿主自带导航条上色 + `Alt+↑/↓`、运行状态小胶囊、水膜滑块、窗口按钮去黑底 |
+| 0.5.0 | 图片大小可调（用户/AI 两路）、引用块四档色调 + 浓度、精修层补到 P9、隔离测试环境 |
