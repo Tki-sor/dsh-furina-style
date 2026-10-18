@@ -5,16 +5,23 @@
 ![dsh-furina-style](docs/preview-dark.png)
 
 一个**纯客户端**的 DSH bundle 插件：零 Host 能力、零第三方依赖、零构建依赖。
-它做三件事：
+它做四件事：
 
 1. **配色**：一套冷调「水与珍珠」的调色板（亮 / 暗各自独立设计），覆盖宿主
    全部 `--dsw-alias-*` 语义 token；
-2. **布局**：抄 claude-style 的几何纪律 —— 独立水面式的输入卡、40px 的底部
-   雾化带、压薄的会话头、32px 行高的弹层、发丝线边框与墨色焦点环；
-3. **动效**：把所有时长 / 曲线 / 距离做成 `--fh-*` 令牌，克制的入场、反馈、
+2. **背景**：默认铺一张芙宁娜插画，上面盖一层可调浓度的纱，强度、模式都在
+   **DeepSeek 设置界面**里调；
+3. **布局**：借鉴 claude-style 的几何纪律 —— 独立水面式的输入卡、压薄的会话头、
+   32px 行高的弹层、发丝线边框与墨色焦点环（**但不复制它的吉祥物、彩蛋**）；
+4. **动效**：把所有时长 / 曲线 / 距离做成 `--fh-*` 令牌，克制的入场、反馈、
    循环呼吸三层节奏，并自带 reduced-motion 双保险。
 
-卸载插件 = 删掉 `<html>` 上的命名空间属性 = 100% 还原，不留任何残影。
+卸载插件 = 删掉 `<html>` 上的命名空间属性 + 那张注入的 `<style>` = 100% 还原，
+不留任何残影。
+
+> **0.2.0 起**：配置项移进了「设置 → 芙宁娜主题」，不再需要手改 localStorage；
+> 默认背景图换成芙宁娜插画；顺手修掉了输入框下方 40px 悬空；并默认收起
+> claude-style 的吉祥物/封号彩蛋与 dsh-pet 的桌宠（可分别关掉）。
 
 ---
 
@@ -39,6 +46,57 @@ node scripts/build.mjs   # src/*.css + src/client.js → lib/client.js
 `lib/client.js` 是产物（顶部有 GENERATED 标记），不要手改。
 
 ---
+
+## 设置
+
+所有开关都在 **DeepSeek 设置 → 芙宁娜主题**（`settings.section`，order 450），
+改完即时生效、不用重启、不用刷新。面板复用宿主 token，跟随亮/暗主题。
+
+| 项 | 取值 | 说明 |
+| --- | --- | --- |
+| 背景 | 插画 / 渐变 / 纯色 | 插画 = 内置那张芙宁娜图；渐变 = 原来的水光渐变；纯色 = 只留画布色 |
+| 插画强度 | 10% – 100% | 改的是纱的 alpha，不是整层 opacity —— 调低时插画更清楚，底色不变亮 |
+| 动效 | 跟随系统 / 开启 / 减弱 | 写 `data-dsh-furina-motion`，与 `prefers-reduced-motion` 双保险 |
+| 布局微调 | 开 / 关 | 输入卡圆角与投影、对话列宽、会话头分隔线 |
+| 隐藏第三方吉祥物 | 开（默认） | 只对已装的 `dsh-claude-style` 的螃蟹/小鲸鱼生效；没装就是一条死规则 |
+| 禁用「封号」彩蛋 | 开（默认） | 只对已装的 `dsh-claude-style` 生效；**本插件自己不含任何彩蛋** |
+| 隐藏桌面宠物 | 开（默认） | 只对已装的 `@linxin666/dsh-pet` 生效（右下角那只鲸鱼娘是它带来的） |
+
+底部还有一行「当前状态」，显示此刻是谁在负责表面（独立 / 修补芙宁娜皮肤 /
+让路给其它皮肤 / 让路给 claude-style），以及一个「恢复默认」。
+
+### 配置存在哪
+
+`localStorage["dsh-furina:prefs"]`，一段 JSON：
+
+```json
+{
+  "background": "art",
+  "backgroundOpacity": 0.55,
+  "layout": true,
+  "motion": "system",
+  "hideMascot": true,
+  "hideBan": true,
+  "hidePet": true
+}
+```
+
+0.1.0 只存过 `dsh-furina:motion`，升级时会自动迁移一次，然后删掉旧键。
+读不到 localStorage（隐私模式、禁用存储）时全部回落到内置默认值，不报错。
+
+### 为什么要「隐藏第三方」这种开关
+
+本插件**不包含**任何吉祥物、桌面宠物或彩蛋，这些元素来自别的插件。但用户
+常把它们误认为是主题带来的，所以给三个可关的开关 + 默认收起，让「装上本主题
+后界面就只剩水色」这件事是可验证的。关掉开关也只是放开 CSS 隐藏，不碰对方
+插件一行代码；对方卸载后这几条规则自然匹配不到任何节点。
+
+### 默认背景图
+
+`assets/furina-art-1440.jpg`（1440×757，69 kB）在构建时被 base64 内联进
+`lib/client.js`，所以**不依赖 Host 静态路由**、不依赖磁盘上还有这个文件。
+代价是产物大 ~93 kB；好处是插件只有「一张样式表」一条加载路径，任何一侧
+挂掉都不会出现「背景 404 → 一片空白」的第三态。
 
 ## 它和「皮肤」有什么不同
 
@@ -84,7 +142,9 @@ DSH 的 skin-center 皮肤包（`skin.json` + `skin.css` + `patches.css`）是**
 
 1. 点亮 `data-dsh-furina-handoff="claude-style"`；
 2. 把 `data-dsh-furina-layout` 切成 `off` —— **整块布局规则让路**；
-3. 只保留配色 token 重映射，让你仍然得到芙宁娜的色。
+3. 只保留配色 token 重映射，让你仍然得到芙宁娜的色；
+4. 顺手把它那两个我们不需要的分节收起来（吉祥物 `hide-mascot`、封号彩蛋
+   `hide-ban`，各有一个默认开启的开关）。只做 CSS 隐藏，不碰它的代码。
 
 这样两套几何不会互相错位（claude-style 会改 composer 圆角、侧栏行高、Windows
 标题栏等全局布局，两边同时全量跑必然打架）。
@@ -111,15 +171,15 @@ DSH 的 skin-center 皮肤包（`skin.json` + `skin.css` + `patches.css`）是**
 
 ### 减弱动效
 
-两档开关，属性门控是主闸：
+三档，在设置面板里选（`动效` 一行），也可以直接写存储：
 
 ```js
 // 跟随系统（默认）
-localStorage.removeItem('dsh-furina:motion');
+localStorage.removeItem('dsh-furina:prefs');   // 或把 motion 置为 "system"
 // 强制开启
-localStorage.setItem('dsh-furina:motion', 'on');
+JSON.parse(localStorage.getItem('dsh-furina:prefs')).motion = 'on';
 // 强制减弱
-localStorage.setItem('dsh-furina:motion', 'reduced');
+JSON.parse(localStorage.getItem('dsh-furina:prefs')).motion = 'reduced';
 ```
 
 改完刷新页面即可。`prefers-reduced-motion: reduce` 还会额外兜底（防 JS 未就绪
@@ -133,13 +193,17 @@ localStorage.setItem('dsh-furina:motion', 'reduced');
 dsh-furina-style/
 ├── package.json          # dsh.bundle.patch / dsh.client 声明
 ├── cordis.patch.yml      # 把自己 insert 进 web roster
-├── index.js              # Host 半边（空实现）
+├── index.js              # Host 半边（空实现，本插件不用 Host 能力）
 ├── skin.json             # 给皮肤中心读的身份证（可选）
+├── assets/
+│   └── furina-art-1440.jpg   # 内置背景插画（构建时转 data URI）
 ├── src/
 │   ├── 00-tokens.css     # 设计令牌 + 三种表面模式的配色
 │   ├── 10-layout.css     # 布局（L1–L9）
 │   ├── 20-motion.css     # 动效（M1–M11）
-│   └── client.js         # 模式判定 / 属性同步 / 样式注入模板
+│   ├── 30-surface.css    # 背景插画层 + 让路规则（隐藏第三方吉祥物/彩蛋/桌宠）
+│   ├── 40-settings.css   # 设置面板样式（.fh-set-*）
+│   └── client.js         # 偏好读写 / 属性同步 / 设置面板 / 样式注入模板
 ├── lib/client.js         # 构建产物（GENERATED）
 ├── scripts/build.mjs     # 零依赖构建脚本
 ├── locale/{zh,en}.json
@@ -172,6 +236,10 @@ dsh-furina-style/
 
 不支持 `:has()` / `color-mix()` 时样式会优雅降级：颜色变量仍然生效，
 用到这两个特性的布局/装饰规则整条失效，不会破坏宿主原有布局。
+
+**对外部插件零依赖**：`dsh-claude-style`、`@linxin666/dsh-pet`、皮肤中心
+都只是「如果装了，就顺手接管它们的几个节点」的关系。它们全都不装时，本插件
+的每条规则只是匹配不到节点，不会报错、不会空等、不会影响启动。
 
 ---
 

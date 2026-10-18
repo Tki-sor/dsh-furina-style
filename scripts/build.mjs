@@ -22,6 +22,11 @@ const SRC = join(ROOT, 'src');
 const OUT = join(ROOT, 'lib');
 
 const PLACEHOLDER = '__FH_STYLESHEET_JSON__';
+/** 背景插画占位符：CSS 里写 url("__FH_BACKGROUND_URI__")，构建时换成 data URI。 */
+const ART_PLACEHOLDER = '__FH_BACKGROUND_URI__';
+const ART_FILE = join(ROOT, 'assets', 'furina-art-1440.jpg');
+const ART_MIME = 'image/jpeg';
+
 const BANNER = [
   '/**',
   ' * dsh-furina-style — GENERATED FILE, do not edit.',
@@ -49,6 +54,28 @@ function stripComments(css) {
   return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{3,}/g, '\n\n');
 }
 
+/**
+ * 背景插画 → data URI。
+ *
+ * 为什么内联而不是走 Host 的静态路由：
+ *   - 静态路由要 Host 半边注册前缀，Host 进程不重启不生效，而样式表改完刷新
+ *     页面就能验证；
+ *   - 内联后插件只有「一张样式表」这一条路径，不存在「路由没挂上 → 404 →
+ *     背景空白」的第三态，符合「任何别的插件没了都不受影响」的要求。
+ * 代价是产物变大（1440 宽的 jpg 约 70 kB → base64 约 93 kB），可以接受。
+ */
+async function loadArt() {
+  let bytes;
+  try {
+    bytes = await readFile(ART_FILE);
+  } catch (error) {
+    throw new Error(
+      'background art missing: ' + ART_FILE + ' (expected a ' + ART_MIME + ' asset)'
+    );
+  }
+  return 'data:' + ART_MIME + ';base64,' + bytes.toString('base64');
+}
+
 async function main() {
   const cssFiles = await collectCss(SRC);
   if (cssFiles.length === 0) throw new Error('no CSS found under src/');
@@ -58,7 +85,9 @@ async function main() {
     const raw = await readFile(file, 'utf8');
     parts.push(stripComments(raw).trim());
   }
-  const stylesheet = parts.join('\n\n');
+
+  const artUri = await loadArt();
+  const stylesheet = parts.join('\n\n').replaceAll(ART_PLACEHOLDER, artUri);
 
   const clientSource = await readFile(join(SRC, 'client.js'), 'utf8');
   const occurrences = clientSource.split(PLACEHOLDER).length - 1;

@@ -81,7 +81,7 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body { --dsw-alias-...: ..
 | --- | --- |
 | 输入卡是一个有厚度的独立表面，不贴在窗口底边 | `border-radius: 18px`（宿主默认 28px 是「整块面板」的量级）、1px 发丝线、三层阴影（发丝 + 品牌色晕 + 宿主 elevation） |
 | 焦点要有「点亮」感，而不是只换边框色 | `:focus-within` 时边框转品牌色 42%，叠 1px 同色晕 + 4px 淡雾 + 更深投影 |
-| 滚动内容在底边淡出，不靠给卡片堆阴影 | 只声明雾化带高度 `--fh-composer-fade-h: 40px`，让宿主/skin 既有的渐变绘制继续工作，我们补滚动区留白 |
+| 滚动内容在底边淡出，不靠给卡片堆阴影 | 不补任何留白：宿主的 `[data-phase=active] .composerSeat` 已有 36px 渐变带；我们曾加过 `padding-bottom:40px`，实测把 seat 顶高 40px（y=610.67/bottom=782 vs 视口 822），正是「输入框悬空」的成因，已删除 |
 | 弹层是 12px 圆角的小卡片，行高 32px | `[role=menu]` / `[role=dialog][data-modal-autofocus]` + `[role=menuitem]` |
 | 正文有阅读宽度上限 | `--dsh-chat-user-width: clamp(720px, 68ch, 900px)`（宿主会据此推导 `--dsh-chat-content-width`） |
 | 标题栏要「让路」给内容 | Windows 上把 `[class*="_frame"]` 的整窗涂色让回透明，改由 body 画布负责 |

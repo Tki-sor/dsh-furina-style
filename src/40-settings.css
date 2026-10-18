@@ -1,0 +1,266 @@
+/* ============================================================================
+   dsh-furina-style — 40. 设置页
+   ----------------------------------------------------------------------------
+   这一页注册在宿主自己的设置界面里（settings.section，id = furina-style），
+   不是插件的私有弹窗。样式全部复用宿主的 --dsw-* 设计变量，所以在亮色/暗色
+   以及任何第三方皮肤下都能跟着系统走，不需要知道具体色值。
+
+   作用域：html[data-dsh-furina] .fh-set —— 插件卸载（属性消失）即全部失效。
+   类名统一 fh-set- 前缀，不会撞到宿主或别的插件。
+   ========================================================================== */
+
+html[data-dsh-furina] .fh-set {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary, #1d2539);
+  max-width: 720px;
+}
+
+html[data-dsh-furina] .fh-set-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+html[data-dsh-furina] .fh-set-title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina] .fh-set-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary, #5f6e93);
+}
+
+html[data-dsh-furina] .fh-set-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--dsw-alias-bg-layer-2, color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 88%, transparent));
+  border: 1px solid var(--dsw-alias-border-l1, rgba(44, 58, 115, 0.12));
+  border-radius: var(--dsw-radius-lg, 16px);
+  padding: 4px 16px;
+}
+
+html[data-dsh-furina] .fh-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+  border-top: 1px solid var(--dsw-alias-border-l1, rgba(44, 58, 115, 0.1));
+}
+
+html[data-dsh-furina] .fh-set-row:first-child {
+  border-top: none;
+}
+
+html[data-dsh-furina] .fh-set-rowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+html[data-dsh-furina] .fh-set-name {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+html[data-dsh-furina] .fh-set-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--dsw-alias-label-tertiary, #7c8bab);
+}
+
+html[data-dsh-furina] .fh-set-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+/* ---- 分段按钮 ------------------------------------------------------------ */
+
+html[data-dsh-furina] .fh-set-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 70%, transparent);
+  border: 1px solid var(--dsw-alias-border-l2, rgba(44, 58, 115, 0.2));
+  border-radius: var(--dsw-radius-md, 12px);
+}
+
+html[data-dsh-furina] .fh-set-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #5f6e93);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: calc(var(--dsw-radius-md, 12px) - 3px);
+  cursor: pointer;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina] .fh-set-seg-btn:hover {
+  color: var(--dsw-alias-label-primary, #1d2539);
+}
+
+html[data-dsh-furina] .fh-set-seg-btn.is-on {
+  background: var(--dsw-alias-brand-primary, #4a5fa8);
+  color: #fff;
+  font-weight: 600;
+}
+
+html[data-dsh-furina] .fh-set-seg-btn:focus-visible,
+html[data-dsh-furina] .fh-set-switch:focus-visible,
+html[data-dsh-furina] .fh-set-reset:focus-visible,
+html[data-dsh-furina] .fh-set-range:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary, #4a5fa8);
+  outline-offset: 2px;
+}
+
+/* ---- 开关 ---------------------------------------------------------------- */
+
+html[data-dsh-furina] .fh-set-switch {
+  appearance: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l3, rgba(44, 58, 115, 0.32));
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 60%, transparent);
+  cursor: pointer;
+  transition:
+    background-color var(--fh-dur-surface, 180ms) var(--fh-ease-glide, ease),
+    border-color var(--fh-dur-surface, 180ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina] .fh-set-switch.is-on {
+  background: var(--dsw-alias-brand-primary, #4a5fa8);
+  border-color: var(--dsw-alias-brand-primary, #4a5fa8);
+}
+
+html[data-dsh-furina] .fh-set-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1, #fff);
+  box-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(20, 30, 60, 0.25));
+  transition: transform var(--fh-dur-surface, 180ms) var(--fh-ease-enter, ease);
+}
+
+html[data-dsh-furina] .fh-set-switch.is-on .fh-set-knob {
+  transform: translateX(16px);
+}
+
+/* ---- 滑块 ---------------------------------------------------------------- */
+
+html[data-dsh-furina] .fh-set-range {
+  appearance: none;
+  width: 132px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a5fa8) 26%, transparent);
+  cursor: pointer;
+}
+
+html[data-dsh-furina] .fh-set-range:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+html[data-dsh-furina] .fh-set-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--dsw-alias-brand-primary, #4a5fa8);
+  box-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(20, 30, 60, 0.3));
+}
+
+html[data-dsh-furina] .fh-set-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary, #5f6e93);
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* ---- 页脚 / 状态 --------------------------------------------------------- */
+
+html[data-dsh-furina] .fh-set-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+html[data-dsh-furina] .fh-set-footline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #7c8bab);
+}
+
+html[data-dsh-furina] .fh-set-footlabel {
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary, #5f6e93);
+}
+
+html[data-dsh-furina] .fh-set-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+html[data-dsh-furina] .fh-set-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-success-primary, #58b058);
+}
+
+html[data-dsh-furina] .fh-set-reset {
+  appearance: none;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(44, 58, 115, 0.2));
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #5f6e93);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  cursor: pointer;
+  transition:
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    border-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina] .fh-set-reset:hover {
+  color: var(--dsw-alias-label-primary, #1d2539);
+  border-color: var(--dsw-alias-brand-primary, #4a5fa8);
+}
+
+/* 减弱动效：设置页自己的过渡也一起关掉 */
+html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-seg-btn,
+html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-switch,
+html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-knob,
+html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-reset {
+  transition: none;
+}

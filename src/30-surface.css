@@ -1,0 +1,144 @@
+/* ============================================================================
+   dsh-furina-style — 30. 表面层：背景插画 + 第三方吉祥物/彩蛋的让路
+   ----------------------------------------------------------------------------
+   这一节只做两件事，都是「可选、可关、不依赖别人的插件存在」：
+
+   A. 背景插画：把芙宁娜的插画作为画布底下的一层 fixed 图层画出来，
+      强度由一个 0..1 的变量族（--fh-art-scrim-*）控制（设置面板里的滑块）。
+      只在 surfaces="own" 生效 —— skin-center 的 furina 皮肤在跑时
+      （surfaces="furina"）它自己就有 backgroundMedia 插画，我们绝不叠第二张。
+
+   B. 让路：用户明确不要 claude 风格的吉祥物和「封号」彩蛋，也不要桌面宠物。
+      这些都不是本插件的代码：
+        - 吉祥物 / 封号彩蛋 → 已装的第三方插件 dsh-claude-style
+          （.dsh-claude-crab / .dsh-claude-deepy / .dsh-claude-ban）
+        - 桌面宠物（鲸鱼娘） → 已装的第三方插件 @linxin666/dsh-pet
+          （[data-dsh-pet-root] / [data-pet-dock]）
+      我们只写「隐藏」规则，不碰它们的 DOM，也不 import 它们。
+      选择器匹配不到时整条规则零副作用，所以那些插件没装 / 改名都不会出错。
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   A. 背景插画层
+   ---------------------------------------------------------------------------
+   画在 body 自己的 background-image 上，而**不是** body::before：
+     - body::before 用 z-index:-1 时，负层级子层在根堆叠上下文里的绘制顺序
+       早于 body 自身的背景，会被 body 不透明的 background-color 整块盖住
+       （已在 live DOM 里实测：::before 算出了背景图，但屏幕上看不见）；
+     - body 的背景天然在全部内容之下，正文、卡片、滚动区都在它上面，
+       所以直接把插画铺在 body 上最稳，也不会吃到任何指针事件。
+
+   强度由 --fh-art-scrim-* 控制（设置面板里的滑块）。叠在插画上面的那层
+   纱用 rgba 的 alpha 与倍率相乘模拟「插画强度」：alpha 越低，插画越透。
+
+   插画要真的看得见，中间那几层「看起来是背景色、其实是实色」的容器必须
+   让开：宿主的 [data-platform=win32] 下 .BynINW_centerCol 与 .BynINW_bottomRow
+   都用 var(--dsw-alias-bg-base) 铺满，会把 body 上的任何背景彻底盖住。
+   所以下面同时把它们改成透明，只留 sidebar 的半透明底色作为层次。
+   ------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"] body {
+  background-color: var(--fh-canvas);
+  background-image:
+    /* 纱：把插画往画布色压，保证正文对比度。alpha 由 --fh-art-scrim 控制，
+       设置面板的滑块会同时改写它，所以插画强度是连续的。 */
+    linear-gradient(
+      180deg,
+      rgb(238 242 250 / var(--fh-art-scrim-top, 0.44)) 0%,
+      rgb(238 242 250 / var(--fh-art-scrim-mid, 0.42)) 46%,
+      rgb(238 242 250 / var(--fh-art-scrim-bottom, 0.46)) 100%
+    ),
+    url("__FH_BACKGROUND_URI__");
+  background-size: cover, cover;
+  background-position: center top, center 30%;
+  background-repeat: no-repeat, no-repeat;
+}
+
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  body[data-ds-dark-theme] {
+  background-color: var(--fh-canvas);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgb(12 18 32 / var(--fh-art-scrim-dark-top, 0.53)) 0%,
+      rgb(12 18 32 / var(--fh-art-scrim-dark-mid, 0.51)) 48%,
+      rgb(12 18 32 / var(--fh-art-scrim-dark-bottom, 0.56)) 100%
+    ),
+    url("__FH_BACKGROUND_URI__");
+}
+
+/* 让插画透出来：中间列与底行去实色；侧栏保持半透明作为层次分隔。 */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  .BynINW_centerCol,
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  .BynINW_bottomRow {
+  background: transparent !important;
+}
+
+/* 会话根容器自己也铺了一层 --dsw-alias-bg-base（比 centerCol 更靠内），
+   不一起清掉的话插画仍然看不到。只清根，卡片/气泡保持原样可读。 */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  [class*="_root"][data-phase],
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  [class*="_embeddedBody"] {
+  background: transparent !important;
+}
+
+/* composer 的 sticky 渐变带是「用底色把滚动内容压住」的，底色没了就会变成
+   一条灰带；改成透明 → 让插画直接透上来。 */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  [data-phase="active"]
+  [data-composer-seat] {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dsw-alias-bg-base) 0%, transparent) 0px,
+    color-mix(in srgb, var(--dsw-alias-bg-base) 55%, transparent) 36px
+  ) !important;
+}
+
+/* 关掉插画：退回纯渐变的「水光」画布（即 0.1.0 的行为） */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="gradient"] body {
+  background-image:
+    radial-gradient(120% 80% at 82% -10%, #ffffff 0%, #eaf0fb 38%, #e2e9f7 62%, #dbe4f5 100%),
+    radial-gradient(60% 40% at 12% 108%, #e7eefc 0%, #eef2fa 70%);
+}
+
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="gradient"]
+  body[data-ds-dark-theme] {
+  background-image:
+    radial-gradient(120% 80% at 82% -10%, #1b2744 0%, #131c31 42%, #0f1626 70%, #0c1220 100%),
+    radial-gradient(70% 45% at 8% 106%, #16233c 0%, #0c1220 72%);
+}
+
+/* 纯色画布：既不要插画也不要渐变 */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="none"] body {
+  background-image: none;
+}
+
+/* ---------------------------------------------------------------------------
+   B. 隐藏第三方吉祥物 / 封号彩蛋（claude-style）
+   ---------------------------------------------------------------------------
+   用属性前缀选择器而不是它的 CSS module 类名：dsh-claude-* 是它自己声明的
+   语义类，跨版本比 _xxxxxx_ 形式的哈希类名稳得多。
+   ------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-hide-mascot="on"] [class*="dsh-claude-crab"],
+html[data-dsh-furina][data-dsh-furina-hide-mascot="on"] [class*="dsh-claude-deepy"] {
+  display: none !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-hide-ban="on"] [class*="dsh-claude-ban"] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   C. 隐藏桌面宠物（@linxin666/dsh-pet 的鲸鱼娘）
+   ---------------------------------------------------------------------------
+   [data-dsh-pet-root] 是它自带的语义根属性；[data-pet-dock] 是内部 dock。
+   两个都写上，任意一个存在就能收掉，不会剩半个残影。
+   ------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-hide-pet="on"] [data-dsh-pet-root],
+html[data-dsh-furina][data-dsh-furina-hide-pet="on"] [data-pet-dock] {
+  display: none !important;
+}

@@ -4,8 +4,8 @@
    抄的是 claude-style 的「几何纪律」，不是它的颜色：
      · 对话正文有明确的阅读宽度上限，两侧留出呼吸
      · 输入卡是一个独立的、有厚度的「水面」，不贴在窗口底边
-     · composer 底边用不透明横条 + 上方 40px 渐变带，让滚动内容淡出而不是
-       靠给卡片堆阴影（这是 claude-style STYLE.md 明确禁掉的做法）
+     · composer 底边交给宿主自己的渐变带淡出滚动内容，我们既不补留白、
+       也不自绘伪元素（claude-style STYLE.md 明确禁掉「给卡片堆阴影」的做法）
      · 弹层是 12px 圆角的小卡片，行高 32px
    只在 own / furina 两种表面模式下生效；other 模式只保留 tokens。
    ========================================================================== */
@@ -131,37 +131,25 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card]:focus-wi
 }
 
 /* ---------------------------------------------------------------------------
-   L5. composer 底边：保留雾化高度，让滚动内容淡出
+   L5. composer 底边：让宿主自己画雾化带，我们**不补任何留白**
    ---------------------------------------------------------------------------
-   这里刻意**不**自己画渐变伪元素。实测两份现成实现已经把 composerSeat 的
-   伪元素占满了：
-     · 宿主：[data-phase=active] .composerSeat 自带
-       background: linear-gradient(180deg, transparent 0, bg-base 36px)
-     · skin-center 的 furina 皮肤还有 ::before(inset:0 + backdrop-filter:blur)
-       和 ::after 两条规则
-   再插一条 ::before 会和它们抢同一个槽位（实测同特异性、后注入者胜，结果
-   我们的渐变被吞成 none）。正确做法是只用变量声明「雾化带有多高」，让宿主/
-   皮肤的既有绘制继续工作，我们只补滚动区留白。
+   这里刻意什么都不做，两个坑都踩过了：
+
+   1) 不要自绘渐变伪元素。宿主 `[data-phase=active] .composerSeat` 自带
+      `background: linear-gradient(180deg, transparent 0, bg-base 36px)`，
+      skin-center 的 furina 皮肤还有自己的 ::before(inset:0 + backdrop-filter)。
+      同特异性下后注入者胜，我们的渐变会被吞成 none。
+
+   2) 不要给 [data-conversation-scroll] 加 padding-bottom。composerSeat 是
+      scrollBody 的**最后一个子元素**且 position:sticky/bottom:0，撑开的留白
+      会把它整体往上顶。实测 padding-bottom:40px 时 seat 的 rect 是
+      y=610.67 bottom=782.00，而视口高 822 —— 输入框下方凭空多出 40px 空白，
+      这就是「输入框悬空」的成因。清零后 seat bottom=822 正好贴底。
+      宿主自己已经用 sticky + 渐变处理了内容淡出，无需我们插手。
    ------------------------------------------------------------------------- */
-html[data-dsh-furina][data-dsh-furina-layout="on"] {
-  --fh-composer-fade-h: 40px;
-}
-
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-seat] {
-  --fh-composer-fade-h: 40px;
-}
-
-/* 滚动区留白必须落在 scrollBody（[data-conversation-scroll]）上。
-   [data-conversation-region="chat"] 命中的是外层 body，那里加 padding 不会
-   把内容顶出雾化带（实测 padding-bottom 仍是 0）。
-
-   只在 own 模式补：skin-center 在 furina 模式会用
-   `html[data-dsh-skin] [data-conversation-scroll]{padding-bottom:0!important}`
-   把留白清零，改用 scroll-margin-bottom 让锚点滚过雾化带 —— 那是它自己的
-   正确做法，我们不该去抢（抢就得加 !important，会破坏别人的实现）。 */
-html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-surfaces="own"]
-  [data-conversation-scroll] {
-  padding-bottom: var(--fh-composer-fade-h, 40px);
+  /* 仅保留一个语义化变量供其他规则引用，不驱动任何 padding。 */
+  --fh-composer-fade-h: 36px;
 }
 
 /* ---------------------------------------------------------------------------

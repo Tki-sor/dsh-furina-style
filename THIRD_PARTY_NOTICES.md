@@ -40,3 +40,14 @@ The host design token names (`--dsw-alias-*`, `--dsw-specific-*`, `--dsw-font-*`
 spacing / radius / elevation scales) are read from and re-declared against the
 host's own public theme contract. All host `data-*` attributes used as selectors
 are the host's own public DOM surface.
+
+## 内置背景插画
+
+`assets/furina-art-1440.jpg` 取自 DSH 官方芙宁娜皮肤包
+（`dsh/skins/furina/assets/furina-art.jpg`，BSD 3-Clause, © 2026 zhu1090093659），
+由本仓库缩放为 1440×757 后随源码分发，仅用于本主题的默认背景。
+本插件不复制该皮肤的任何 CSS、patches 或 hooks 源码。
+
+若官方皮肤的许可证或素材归属发生变化，删掉 `assets/` 后重新运行
+`node scripts/build.mjs` 即可移除该素材（构建会因缺文件而明确报错，不会静默产出半成品）。
+
