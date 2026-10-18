@@ -1,0 +1,274 @@
+/* ============================================================================
+   dsh-furina-style — 10. 布局
+   ----------------------------------------------------------------------------
+   抄的是 claude-style 的「几何纪律」，不是它的颜色：
+     · 对话正文有明确的阅读宽度上限，两侧留出呼吸
+     · 输入卡是一个独立的、有厚度的「水面」，不贴在窗口底边
+     · composer 底边用不透明横条 + 上方 40px 渐变带，让滚动内容淡出而不是
+       靠给卡片堆阴影（这是 claude-style STYLE.md 明确禁掉的做法）
+     · 弹层是 12px 圆角的小卡片，行高 32px
+   只在 own / furina 两种表面模式下生效；other 模式只保留 tokens。
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   L1. Windows 整窗涂色兜底
+   ---------------------------------------------------------------------------
+   宿主在 [data-windows-titlebar] 上把 --dsw-specific-sidebar-fill 画满整个
+   frame 当标题栏底色（见 css_dsh-client-ui-layout: [data-windows-titlebar]
+   .frame{background:var(--dsw-specific-sidebar-fill)}）。如果皮肤给了不透明
+   的 sidebar-fill，整窗就会被涂平、盖住背景插画（blue-fantasy #1803）。
+   这里把 frame 的涂色让回去，改由 body 的画布背景负责。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [class*="_frame"] {
+  background: transparent !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-windows-titlebar] [class*="_frame"]::before {
+  background: transparent !important;
+}
+
+/* 标题栏本身保留一点点毛玻璃，让窗口有边缘感 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-windows-titlebar] [class*="_frame"] {
+  --fh-titlebar-veil: color-mix(in srgb, var(--dsw-alias-bg-base) 72%, transparent);
+  background-image: linear-gradient(to bottom, var(--fh-titlebar-veil) 0, transparent var(--dsh-windows-titlebar-height, 40px)) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   L2. 会话头：把标题行压薄，tab 只在 hover / 激活时亮
+   ---------------------------------------------------------------------------
+   宿主没有 data-conversation-header 这个属性（实测 header 只有 class 和
+   data-window-drag），所以不能用它当锚点。稳定锚点是「包含 tab 列表的那个
+   header 元素」：header:has([data-conversation-tabs])。侧栏不会包含 tab，
+   因此不会误伤。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) {
+  border-bottom-color: color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tablist"] {
+  gap: 26px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"] {
+  transition:
+    color var(--fh-dur-feedback) var(--fh-ease-standard),
+    opacity var(--fh-dur-feedback) var(--fh-ease-standard);
+  opacity: 0.72;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"]:hover,
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"][aria-selected="true"] {
+  opacity: 1;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"][aria-selected="true"]::after {
+  background: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   L3. 对话流：阅读宽度、行距、气泡厚度
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] {
+  /* 内容宽度走宿主变量，宿主会跟着容器宽度自适应 */
+  --dsh-chat-user-width: clamp(720px, 68ch, 900px);
+}
+
+/* 会话滚动区：底部留出 composer 渐变带的高度，最后一条消息不会被压住 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-scroll] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--dsw-alias-scrollbar-bg-l2) transparent;
+}
+
+/* 用户气泡：更圆、更薄的一层水膜 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [class*="_bubble"] {
+  border-radius: var(--dsw-radius-xl);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--dsw-specific-bubble-highlight) 70%, transparent);
+}
+
+/* 行尾操作条：默认淡出，hover 或聚焦时出现（claude-style 的 reveal 节奏） */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail] {
+  transition: opacity var(--fh-dur-reveal) var(--fh-ease-standard);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail][data-actions-reveal="hover"] {
+  opacity: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-chat-turn]:hover [data-turn-tail][data-actions-reveal="hover"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail][data-actions-reveal="hover"]:focus-within,
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail][data-actions-reveal="hover"]:hover {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   L4. 输入卡：独立水面 + 焦点点亮
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card] {
+  /* 宿主默认用 --dsw-radius-panel(28px)，那是「一整块面板」的圆角；
+     输入卡比面板小一号才像一张独立的水面（claude-style 同款 18px）。 */
+  border-radius: 18px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-specific-input-major);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent),
+    0 6px 20px -8px color-mix(in srgb, var(--fh-brand) 22%, transparent),
+    var(--dsw-elevation-soft);
+  transition:
+    border-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    box-shadow var(--fh-dur-surface) var(--fh-ease-glide),
+    transform var(--fh-dur-surface) var(--fh-ease-glide);
+}
+
+/* 焦点点亮：发丝线转墨色 + 同色晕 + 更深投影（claude-style 的核心手感） */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card]:focus-within {
+  border-color: color-mix(in srgb, var(--fh-brand) 42%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--fh-brand) 28%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--fh-brand) 10%, transparent),
+    0 10px 28px -12px color-mix(in srgb, var(--fh-brand) 40%, transparent),
+    var(--dsw-elevation-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   L5. composer 底边：保留雾化高度，让滚动内容淡出
+   ---------------------------------------------------------------------------
+   这里刻意**不**自己画渐变伪元素。实测两份现成实现已经把 composerSeat 的
+   伪元素占满了：
+     · 宿主：[data-phase=active] .composerSeat 自带
+       background: linear-gradient(180deg, transparent 0, bg-base 36px)
+     · skin-center 的 furina 皮肤还有 ::before(inset:0 + backdrop-filter:blur)
+       和 ::after 两条规则
+   再插一条 ::before 会和它们抢同一个槽位（实测同特异性、后注入者胜，结果
+   我们的渐变被吞成 none）。正确做法是只用变量声明「雾化带有多高」，让宿主/
+   皮肤的既有绘制继续工作，我们只补滚动区留白。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] {
+  --fh-composer-fade-h: 40px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-seat] {
+  --fh-composer-fade-h: 40px;
+}
+
+/* 滚动区留白必须落在 scrollBody（[data-conversation-scroll]）上。
+   [data-conversation-region="chat"] 命中的是外层 body，那里加 padding 不会
+   把内容顶出雾化带（实测 padding-bottom 仍是 0）。
+
+   只在 own 模式补：skin-center 在 furina 模式会用
+   `html[data-dsh-skin] [data-conversation-scroll]{padding-bottom:0!important}`
+   把留白清零，改用 scroll-margin-bottom 让锚点滚过雾化带 —— 那是它自己的
+   正确做法，我们不该去抢（抢就得加 !important，会破坏别人的实现）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-surfaces="own"]
+  [data-conversation-scroll] {
+  padding-bottom: var(--fh-composer-fade-h, 40px);
+}
+
+/* ---------------------------------------------------------------------------
+   L6. 弹层：12px 圆角卡片，行高 32px，开启动效
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="menu"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="dialog"][data-modal-autofocus] {
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="menuitem"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="menu"] [role="menuitemcheckbox"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="menu"] [role="menuitemradio"] {
+  min-height: 32px;
+  border-radius: var(--dsw-radius-sm);
+  transition: background-color var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+/* 内置「会话统计」弹层：保持它自己的几何，只补一层水面质感 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-session-stats-details] {
+  row-gap: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   L7. 侧栏：行高收紧、选中态是一层水膜而不是纯色块
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [class*="_sidebarCol"] *[role="treeitem"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [class*="_sidebarCol"] [class*="_panelRow"] {
+  border-radius: var(--dsw-radius-sm);
+  transition:
+    background-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    color var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+/* ---------------------------------------------------------------------------
+   L8. 滚动条 / 选区 / 焦点环（全局，claude-style 同款纪律）
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--dsw-alias-scrollbar-bg-l2) 80%, transparent) transparent;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: var(--dsw-alias-scrollbar-bg-l2);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 选区：唯一故意离开调色板的表面（足够对比，水色系里选不出可读的选区） */
+html[data-dsh-furina] ::selection {
+  background: #4a5fa8;
+  color: #ffffff;
+}
+
+html[data-dsh-furina] body[data-ds-dark-theme] ::selection {
+  background: #93a8e0;
+  color: #0c1220;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] :focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--fh-brand) 62%, transparent);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   L9. 正文排版：中文行高与段落节奏
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] p {
+  margin: 12px 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] p:first-child {
+  margin-top: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] p:last-child {
+  margin-bottom: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(h1, h2, h3) {
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] blockquote {
+  border-inline-start: 2px solid color-mix(in srgb, var(--fh-brand) 46%, transparent);
+  border-radius: 0 var(--dsw-radius-sm) var(--dsw-radius-sm) 0;
+  background: color-mix(in srgb, var(--fh-brand-wash) 42%, transparent);
+  padding: 8px 14px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] table {
+  width: max-content;
+  min-width: 100%;
+}

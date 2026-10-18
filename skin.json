@@ -1,0 +1,11 @@
+{
+  "id": "furina-style",
+  "name": "Furina Style",
+  "tagline": "芙宁娜水色 + Claude 风格的布局与动效",
+  "accent": "#4a5fa8",
+  "bodyAttr": "data-dsh-furina",
+  "package": "dsh-furina-style",
+  "wiring": {
+    "id": "ui-skin-furina-style"
+  }
+}

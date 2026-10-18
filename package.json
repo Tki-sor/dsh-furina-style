@@ -1,0 +1,60 @@
+{
+  "name": "dsh-furina-style",
+  "version": "0.1.0",
+  "description": "Furina Style — 芙宁娜风格主题插件：芙宁娜水色视觉 + Claude 风格的布局与动效",
+  "type": "module",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./skin.json": "./skin.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "locale",
+    "scripts",
+    "src",
+    "skin.json",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "docs",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "theme",
+    "skin",
+    "furina"
+  ],
+  "license": "MIT",
+  "author": "Tki-sor",
+  "homepage": "https://github.com/Tki-sor/dsh-furina-style",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tki-sor/dsh-furina-style.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.1.7"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

@@ -1,0 +1,274 @@
+/* ============================================================================
+   dsh-furina-style — 20. 动效
+   ----------------------------------------------------------------------------
+   动效的纪律（照 claude-style 的 STYLE.md 提炼，换成水的隐喻）：
+     · 所有时长/曲线/距离都走 --fh-* 令牌，样式表里不写字面值
+     · 入场比退场慢（enter 320ms / exit 120ms），反馈永远最快（120ms）
+     · 只动 transform / opacity / color / box-shadow，不动 layout 属性
+     · 宿主已经给 [data-chat-motion] 里的孩子写过 transition，这里不重复定义
+       同名属性，只补宿主没做的部分
+     · prefers-reduced-motion 与属性门控双保险；属性门控是主闸
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   M1. 水流：消息入场
+   ---------------------------------------------------------------------------
+   宿主在 data-chat-motion 打开时会给流项目加 margin-top 过渡。我们不动它，
+   而是给新出现的助手正文加一层很轻的「上浮 + 微模糊消散」。
+   ------------------------------------------------------------------------- */
+@keyframes fh-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--fh-rise, 12px));
+    filter: blur(var(--fh-blur-soft, 2px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-slot="conversation.chat.node"] > * {
+  animation: fh-rise-in var(--fh-dur-enter) var(--fh-ease-settle) both;
+}
+
+/* 宿主自己会做首屏挂载，别让历史消息集体飘一遍：只给最后一条 */
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-slot="conversation.chat.node"] > *:not(:last-child) {
+  animation: none;
+}
+
+/* ---------------------------------------------------------------------------
+   M2. 水光：流式输出光标
+   ------------------------------------------------------------------------- */
+@keyframes fh-stream-pulse {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scaleY(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-streaming]::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-inline-start: 2px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: var(--fh-brand);
+  animation: fh-stream-pulse var(--fh-dur-breathe) var(--fh-ease-standard) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   M3. 涟漪：思考态
+   ---------------------------------------------------------------------------
+   宿主自带的忙碌标记在 [data-chat-flow-kind="turn-process"] / [data-state=running]。
+   我们只在它外面叠一圈缓慢呼吸的径向光，不替换它的图标。
+   ------------------------------------------------------------------------- */
+@keyframes fh-breathe {
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(1.04);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-process"] [data-state="running"] {
+  position: relative;
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-process"] [data-state="running"]::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--fh-brand) 26%, transparent) 0,
+    transparent 68%
+  );
+  animation: fh-breathe calc(var(--fh-dur-breathe) * 1.4) var(--fh-ease-standard) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   M4. 涌动：工具卡 / 思考块展开
+   ---------------------------------------------------------------------------
+   宿主用 data-expanded 表达展开态，展开的是 grid-template-rows 还是高度由它
+   自己决定。这里只加「内容出现时的一点位移」，不改尺寸计算。
+   ------------------------------------------------------------------------- */
+@keyframes fh-unfold {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--fh-nudge, 4px) * -1));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-expanded="true"] > * {
+  animation: fh-unfold var(--fh-dur-surface) var(--fh-ease-glide) both;
+}
+
+/* ---------------------------------------------------------------------------
+   M5. 潮起：浮层 / 弹层入场
+   ---------------------------------------------------------------------------
+   宿主弹层是 portal 出来的，挂载即出现；我们用 scale + 位移做一次「从锚点
+   长出」的观感。退场用不到动画（宿主直接卸载），所以只写 enter。
+   ------------------------------------------------------------------------- */
+@keyframes fh-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--fh-nudge, 4px)) scale(var(--fh-scale-menu, 0.98));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menu"],
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="dialog"] {
+  animation: fh-surface-in var(--fh-dur-surface) var(--fh-ease-glide) both;
+}
+
+/* 弹层里逐行错开（stagger 70ms 的变体：60ms） */
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menu"] > * {
+  animation: fh-surface-in var(--fh-dur-reveal) var(--fh-ease-glide) both;
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menu"] > :nth-child(2) {
+  animation-delay: 30ms;
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menu"] > :nth-child(3) {
+  animation-delay: 60ms;
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menu"] > :nth-child(n + 4) {
+  animation-delay: 90ms;
+}
+
+/* ---------------------------------------------------------------------------
+   M6. 潮退：hover / press 反馈
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-motion="on"] button,
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="button"],
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="tab"],
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menuitem"] {
+  transition:
+    background-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    border-color var(--fh-dur-feedback) var(--fh-ease-standard),
+    color var(--fh-dur-feedback) var(--fh-ease-standard),
+    opacity var(--fh-dur-feedback) var(--fh-ease-standard),
+    box-shadow var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] button:active,
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="button"]:active {
+  transform: scale(0.985);
+  transition-duration: var(--fh-dur-instant);
+}
+
+/* ---------------------------------------------------------------------------
+   M7. 水纹：tab 切换时的高亮滑块
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-motion="on"] [role="tab"]::after {
+  transition:
+    background-color var(--fh-dur-move) var(--fh-ease-glide),
+    box-shadow var(--fh-dur-move) var(--fh-ease-glide),
+    opacity var(--fh-dur-move) var(--fh-ease-glide);
+}
+
+/* ---------------------------------------------------------------------------
+   M8. 涟漪：复制 / 完成反馈
+   ---------------------------------------------------------------------------
+   宿主在复制成功时切 data-json-copy-active / 图标。我们不抢它的图标，
+   只让被点的那个按钮轻轻荡一下。
+   ------------------------------------------------------------------------- */
+@keyframes fh-ripple {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--fh-brand) 34%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--fh-brand) 0%, transparent);
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-json-copy-active="true"],
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-copied="true"] {
+  animation: fh-ripple var(--fh-dur-surface) var(--fh-ease-out) both;
+  border-radius: var(--dsw-radius-sm);
+}
+
+/* ---------------------------------------------------------------------------
+   M9. 水位：侧栏折叠
+   ---------------------------------------------------------------------------
+   宿主的折叠是 grid 列宽变化，transition 写在 layout 包自己的类上。我们
+   只补一条自定义属性，让它的侧栏宽度过渡用我们的曲线（不影响其它动画）。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-motion="on"] [class*="_sidebarCol"] {
+  transition:
+    width var(--fh-dur-move) var(--fh-ease-glide),
+    min-width var(--fh-dur-move) var(--fh-ease-glide),
+    grid-template-columns var(--fh-dur-move) var(--fh-ease-glide);
+}
+
+/* ---------------------------------------------------------------------------
+   M10. 呼吸：装饰性水光层
+   ---------------------------------------------------------------------------
+   纯装饰：一片极淡的径向光在画布右上缓慢漂移。只挂 body::before，
+   不参与命中测试，也不会成为 fixed 后代的包含块（不用 backdrop-filter）。
+   ------------------------------------------------------------------------- */
+@keyframes fh-ambient-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate3d(-2%, 1.5%, 0) scale(1.06);
+    opacity: 0.72;
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-motion="on"][data-dsh-furina-surfaces="own"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 34% at 78% 4%, color-mix(in srgb, var(--fh-brand-wash) 34%, transparent) 0, transparent 72%),
+    radial-gradient(30% 26% at 14% 96%, color-mix(in srgb, var(--fh-pearl) 28%, transparent) 0, transparent 78%);
+  animation: fh-ambient-drift calc(var(--fh-dur-breathe) * 8) var(--fh-ease-settle) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   M11. 减弱动效：双保险
+   --------------------------------------------------------------------------
+   主闸是属性 [data-dsh-furina-motion="reduced"]（JS 跟随系统设置写入），
+   兜底再写一条媒体查询，防止 JS 还没跑起来时动效先播一遍。
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsh-furina] *,
+  html[data-dsh-furina] *::before,
+  html[data-dsh-furina] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

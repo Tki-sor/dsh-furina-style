@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fb4ec"/>
+      <stop offset="1" stop-color="#4a5fa8"/>
+    </linearGradient>
+    <radialGradient id="pearl" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#dbe6fb"/>
+      <stop offset="1" stop-color="#a5b7e2"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#101624"/>
+  <path d="M32 8c8.4 9.6 13.6 16.6 13.6 22.6C45.6 40.9 39.8 47 32 47S18.4 40.9 18.4 30.6C18.4 24.6 23.6 17.6 32 8z" fill="url(#water)"/>
+  <path d="M32 14.5c5.8 6.9 9.4 12 9.4 16.2 0 6.9-4.2 10.6-9.4 10.6" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="43" cy="44" r="8.5" fill="url(#pearl)"/>
+  <circle cx="40.6" cy="41.4" r="2.2" fill="#ffffff" fill-opacity="0.85"/>
+</svg>
