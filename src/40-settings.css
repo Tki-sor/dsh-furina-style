@@ -117,7 +117,9 @@ html[data-dsh-furina] .fh-set-seg-btn:hover {
 
 html[data-dsh-furina] .fh-set-seg-btn.is-on {
   background: var(--dsw-alias-brand-primary, #4a5fa8);
-  color: #fff;
+  /* 不能用 #fff：暗色品牌色 rgb(127,150,210) 配白字只有 2.92:1（审计 #7），
+     宿主为此专门提供了 label-primary-foreground（亮底深字 / 暗底浅字）。 */
+  color: var(--dsw-alias-label-primary-foreground, #fff);
   font-weight: 600;
 }
 

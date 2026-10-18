@@ -168,17 +168,20 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] button,
 html[data-dsh-furina][data-dsh-furina-motion="on"] [role="button"],
 html[data-dsh-furina][data-dsh-furina-motion="on"] [role="tab"],
 html[data-dsh-furina][data-dsh-furina-motion="on"] [role="menuitem"] {
+  /* 必须带上 transform：下面 :active 的 scale 若不在过渡列表里会瞬时跳变
+     （审计 #17）；同时把它排在最后，避免抢背景色的手感。 */
   transition:
     background-color var(--fh-dur-feedback) var(--fh-ease-standard),
     border-color var(--fh-dur-feedback) var(--fh-ease-standard),
     color var(--fh-dur-feedback) var(--fh-ease-standard),
     opacity var(--fh-dur-feedback) var(--fh-ease-standard),
-    box-shadow var(--fh-dur-feedback) var(--fh-ease-standard);
+    box-shadow var(--fh-dur-feedback) var(--fh-ease-standard),
+    transform var(--fh-dur-feedback) var(--fh-ease-standard);
 }
 
 html[data-dsh-furina][data-dsh-furina-motion="on"] button:active,
 html[data-dsh-furina][data-dsh-furina-motion="on"] [role="button"]:active {
-  transform: scale(0.985);
+  transform: scale(var(--fh-scale-press, 0.97));
   transition-duration: var(--fh-dur-instant);
 }
 
@@ -207,11 +210,9 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [role="tab"]::after {
   }
 }
 
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-json-copy-active="true"],
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-copied="true"] {
-  animation: fh-ripple var(--fh-dur-surface) var(--fh-ease-out) both;
-  border-radius: var(--dsw-radius-sm);
-}
+/* 复制成功的反馈：宿主 0.1.x 把属性写成空值（`data-json-copy-active=""`），
+   `[data-copied]` 全库 0 处，所以这里**没有**可挂的选择器。与其写一条永远
+   打空的规则，不如留白 —— 复制按钮本来就有宿主自己的图标切换反馈。 */
 
 /* ---------------------------------------------------------------------------
    M9. 水位：侧栏折叠
@@ -263,9 +264,10 @@ html[data-dsh-furina][data-dsh-furina-motion="on"][data-dsh-furina-surfaces="own
    兜底再写一条媒体查询，防止 JS 还没跑起来时动效先播一遍。
    ------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  html[data-dsh-furina] *,
-  html[data-dsh-furina] *::before,
-  html[data-dsh-furina] *::after {
+  /* 用户在本插件里显式选择「始终动效」= motion="on" 时不压（审计 #15） */
+  html[data-dsh-furina]:not([data-dsh-furina-motion="on"]) *,
+  html[data-dsh-furina]:not([data-dsh-furina-motion="on"]) *::before,
+  html[data-dsh-furina]:not([data-dsh-furina-motion="on"]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

@@ -1,0 +1,96 @@
+/* ============================================================================
+   dsh-furina-style — 55. 对话导航条（宿主那条，不是我们画的）
+   ----------------------------------------------------------------------------
+   宿主包 @deepseek-ai/dsh-client-ui-chat 自带 TurnNavigator：对话右侧一列
+   短横线，一轮一根，带 aria-current、hover 预览气泡、虚拟滚动、上下淡出
+   遮罩、容器查询和减弱动效支持。它的结构是
+
+     nav[class*="_frame"][aria-label]
+       └ div[class*="_scroller"]
+           └ div[class*="_marks"]
+               └ button[data-index][aria-label]     ← 一根刻度
+
+   0.4.0 我们没发现它，又照着 claude-style 自绘了一列 .fh-rail，于是右侧
+   同时挂着两列刻度、横向还错开几十像素 —— 这是「看着不像成品」的最大来源。
+   0.4.1 起改成：不再创建任何 DOM，只给宿主这条上颜色与手感。
+
+   为什么用 data-index 锚定而不是 .xpvNua_*：
+     CSS-module 的类名前缀是构建产物哈希，宿主升版本就会变；而刻度上的
+     button[data-index] 是组件的语义契约（点击、aria、虚拟化都靠它），稳定得多。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   R1. 刻度线：宿主默认是 border-l4（暗色下 rgba(160,180,230,.34)）20x2px，
+       再被父级 scaleX(.6) 压到 12px，在插画背景上几乎看不见。这里换成皮肤
+       的水色，并让「未加载 / 普通 / 悬停 / 当前」四档拉出明确层次。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]::before {
+  background: var(--fh-rail-mark, color-mix(in srgb, var(--dsw-alias-label-tertiary) 62%, transparent));
+  border-radius: 999px;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    transform var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    opacity var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+/* 未加载的轮次：更淡、更短，但不能淡到看不见 */
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]:not([aria-current])::before {
+  opacity: 0.55;
+}
+
+/* 悬停：整根刻度由宿主的 transform 负责伸长，这里只提亮 */
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]:hover::before,
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]:focus-visible::before {
+  background: var(--dsw-alias-label-secondary);
+  opacity: 1;
+}
+
+/* 当前这一轮：水色主线 + 一点光晕，像水面上一道亮痕 */
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[aria-current="true"]::before {
+  background: var(--dsw-alias-brand-primary);
+  opacity: 1;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--dsw-alias-brand-primary) 38%, transparent);
+}
+
+/* 键盘焦点：用皮肤自己的焦点环，别用宿主那个透明的 --dsw-focus-ring-color */
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--fh-brand) 62%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--dsw-radius-sm);
+}
+
+/* ----------------------------------------------------------------------------
+   R2. 悬停预览气泡：宿主用 role=tooltip 的 div 画它，默认样式很素。给一层
+       和菜单同一族的水面（圆角、发丝边、浮起阴影），读起来是同一个产品。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) [role="tooltip"] {
+  border-radius: var(--dsw-radius-md, 12px);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-3));
+  box-shadow: var(--dsw-elevation-panel, var(--dsw-shadow-lv2));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) [role="tooltip"] :is(strong, b) {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* ----------------------------------------------------------------------------
+   R3. 减弱动效：宿主已经处理了它自己的 transition，这里只保证我们的改动
+       不带额外运动。
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsh-furina][data-dsh-furina-rail="on"] nav:has(> * button[data-index]) button[data-index]::before {
+    transition: none;
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-rail="on"][data-dsh-furina-motion="reduced"] nav:has(> * button[data-index]) button[data-index]::before {
+  transition: none;
+}

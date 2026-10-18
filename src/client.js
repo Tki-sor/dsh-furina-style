@@ -57,6 +57,10 @@ window.__ModuleLoader__.load({
     const ATTR_MOTION = 'data-dsh-furina-motion';
     /** 背景模式：art / gradient / none。 */
     const ATTR_BG = 'data-dsh-furina-bg';
+    /** 对话导航条开关：on / off。 */
+    const ATTR_RAIL = 'data-dsh-furina-rail';
+    /** 状态细节开关：on / off（给宿主状态行补一句「在做什么」）。 */
+    const ATTR_STATUS = 'data-dsh-furina-status';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -66,6 +70,8 @@ window.__ModuleLoader__.load({
       ATTR_LAYOUT,
       ATTR_MOTION,
       ATTR_BG,
+      ATTR_RAIL,
+      ATTR_STATUS,
       ATTR_HANDOFF,
     ];
 
@@ -106,12 +112,15 @@ window.__ModuleLoader__.load({
 
     const PREFS_KEY = 'dsh-furina:prefs';
 
-    /** 默认值：背景用插画，布局与动效全开。 */
+    /** 默认值：背景用插画，布局、动效、导航条、状态细节全开。 */
     const PREFS_DEFAULT = Object.freeze({
       background: 'art', // art | gradient | none
       backgroundOpacity: 0.55, // 0..1
+      veil: 0.4, // 0..1 —— 正文水膜浓度（0 = 完全去掉）
       layout: true,
       motion: 'system', // system | on | reduced
+      rail: true, // 对话导航条（右侧短横线）
+      status: true, // 状态行细节（在宿主那行后面补「在做什么」）
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
@@ -123,6 +132,13 @@ window.__ModuleLoader__.load({
       return Math.min(1, Math.max(0.1, Math.round(n * 100) / 100));
     }
 
+    /** 水膜可以到 0（完全关掉），所以下限与插画强度不同。 */
+    function clampVeil(value) {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return PREFS_DEFAULT.veil;
+      return Math.min(1, Math.max(0, Math.round(n * 100) / 100));
+    }
+
     function pickEnum(value, allowed, fallback) {
       return allowed.indexOf(value) === -1 ? fallback : value;
     }
@@ -132,8 +148,11 @@ window.__ModuleLoader__.load({
       return {
         background: pickEnum(input.background, BACKGROUND_MODES, PREFS_DEFAULT.background),
         backgroundOpacity: clampOpacity(input.backgroundOpacity),
+        veil: clampVeil(input.veil),
         layout: input.layout === undefined ? PREFS_DEFAULT.layout : Boolean(input.layout),
         motion: pickEnum(input.motion, MOTION_MODES, PREFS_DEFAULT.motion),
+        rail: input.rail === undefined ? PREFS_DEFAULT.rail : Boolean(input.rail),
+        status: input.status === undefined ? PREFS_DEFAULT.status : Boolean(input.status),
       };
     }
 
@@ -281,6 +300,8 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_LAYOUT, prefs.layout && !handoff ? 'on' : 'off');
       setAttr(root, ATTR_MOTION, resolveMotion(prefs.motion));
       setAttr(root, ATTR_BG, prefs.background);
+      setAttr(root, ATTR_RAIL, prefs.rail ? 'on' : 'off');
+      setAttr(root, ATTR_STATUS, prefs.status ? 'on' : 'off');
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -290,6 +311,8 @@ window.__ModuleLoader__.load({
       for (let i = 0; i < ART_SCRIM_VARS.length; i += 1) {
         root.style.setProperty(ART_SCRIM_VARS[i], alphas[i]);
       }
+      // 正文水膜浓度：CSS 只读这一个变量，0 = 完全透明。
+      root.style.setProperty('--fh-veil', String(clampVeil(prefs.veil)));
     }
 
     /* ------------------------------------------------------------------ */
@@ -350,20 +373,336 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ */
+    /* 对话导航：宿主已经画了一条，我们只补键盘快捷键                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 宿主自带轮次导航：@deepseek-ai/dsh-client-ui-chat 的 TurnNavigator 在
+     * 对话右侧渲染一条竖排短横线（`nav` 里每个已加载轮次一个
+     * `button[data-index]`），自带 aria-current、hover 预览气泡、虚拟滚动、
+     * 上下淡出遮罩、容器查询与减弱动效支持。
+     *
+     * 0.4.0 之前本插件又自绘了一列 `.fh-rail`，于是右侧同时挂着两列刻度、
+     * 位置还错开 20~60px —— 这是「看着不像成品」的直接来源（审计 #113）。
+     * 0.4.1 起：不再创建任何 DOM，外观由 55-rail.css 直接给宿主那条 nav 上色；
+     * 这里只补宿主没有的「键盘」—— Alt+↑ / Alt+↓ 在轮次之间跳。
+     */
+    function installRailKeys(translate) {
+      if (typeof document === 'undefined') return function () {};
+      const t = typeof translate === 'function' ? translate : fallbackTranslate;
+      let disposed = false;
+
+      function isEnabled() {
+        return document.documentElement.getAttribute(ATTR_RAIL) === 'on';
+      }
+
+      function scrollElement() {
+        return document.querySelector('[data-conversation-scroll]');
+      }
+
+      /** 已加载的轮次（宿主分页加载，没加载的轮次不在 DOM 里）。 */
+      function turnNodes(scrollEl) {
+        if (scrollEl === null) return [];
+        return Array.prototype.slice.call(
+          scrollEl.querySelectorAll('[data-chat-flow-kind="user"][data-chat-turn]')
+        );
+      }
+
+      function preferredScrollBehavior() {
+        return resolveMotion(readPrefs().motion) === 'reduced' ? 'auto' : 'smooth';
+      }
+
+      /** 视口里最靠上的一轮 = 当前轮；都不在视口内则取最近的一轮。 */
+      function activeIndex(nodes, scrollEl) {
+        if (nodes.length === 0) return -1;
+        const box = scrollEl.getBoundingClientRect();
+        const probe = box.top + Math.min(120, box.height / 3);
+        let best = -1;
+        let bestDistance = Infinity;
+        for (let i = 0; i < nodes.length; i += 1) {
+          const rect = nodes[i].getBoundingClientRect();
+          if (rect.top <= probe && rect.bottom >= box.top) best = i;
+          const distance = Math.abs(rect.top - probe);
+          if (distance < bestDistance) bestDistance = distance;
+        }
+        if (best >= 0) return best;
+        let nearest = 0;
+        let nearestDistance = Infinity;
+        for (let i = 0; i < nodes.length; i += 1) {
+          const distance = Math.abs(nodes[i].getBoundingClientRect().top - box.top);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearest = i;
+          }
+        }
+        return nearest;
+      }
+
+      function jump(nodes, scrollEl, index) {
+        const node = nodes[index];
+        if (node === undefined || node === null) return;
+        const box = scrollEl.getBoundingClientRect();
+        const offset = node.getBoundingClientRect().top - box.top + scrollEl.scrollTop;
+        try {
+          scrollEl.scrollTo({ top: Math.max(0, offset - 12), behavior: preferredScrollBehavior() });
+        } catch (error) {
+          scrollEl.scrollTop = Math.max(0, offset - 12);
+        }
+      }
+
+      /** Alt+↑ / Alt+↓：跳上一轮 / 下一轮。输入框有草稿时不抢键。 */
+      function onKeyDown(event) {
+        if (disposed || !isEnabled() || !event.altKey) return;
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing) return;
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        const target = event.target;
+        if (target !== null && typeof target.closest === 'function') {
+          const field = target.closest('input, textarea, [contenteditable="true"]');
+          if (field !== null) {
+            const draft = typeof field.value === 'string' ? field.value : field.textContent;
+            if (typeof draft === 'string' && draft.trim().length > 0) return;
+          }
+          if (target.closest('[role="dialog"], [role="menu"]') !== null) return;
+        }
+        const scrollEl = scrollElement();
+        const nodes = turnNodes(scrollEl);
+        if (scrollEl === null || nodes.length === 0) return;
+        const dir = event.key === 'ArrowUp' ? -1 : 1;
+        const current = activeIndex(nodes, scrollEl);
+        const next = Math.min(nodes.length - 1, Math.max(0, current + dir));
+        event.preventDefault();
+        jump(nodes, scrollEl, next);
+      }
+
+      window.addEventListener('keydown', onKeyDown, true);
+
+      return function () {
+        disposed = true;
+        window.removeEventListener('keydown', onKeyDown, true);
+      };
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 状态细节：给宿主的「深度求索中」补一句在做什么                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 宿主已经有一整行运行态文案（「深度求索中，用时 N 分 N 秒」+ 扫光 + 鲸鱼
+     * 动画）。我们不去改它的文字（那是 React 的文本节点，动它会打架），而是
+     * 往那一行元素上写两个自定义属性：
+     *
+     *   data-fh-phase       think / tool / stall
+     *   data-fh-phase-label 本地化后的一句话
+     *
+     * CSS 再用 ::after + content: attr(data-fh-phase-label) 把它画成紧跟其后
+     * 的小胶囊。属性不是 React 管理的东西，重渲染不会把它冲掉；插件卸载时
+     * 我们主动清掉，页面上不留痕迹。
+     *
+     * 四个阶段怎么判：
+     *   tool  有 [data-tool][data-state="running"] 挂着 → 补工具名
+     *   write 助手正文正在变长（每次轮询采样文本长度）→ 补「正在写回答」
+     *   stall 十二条秒内对话流没有任何变动，但仍然在跑 → 补「暂未响应」
+     *   think 以上都不是
+     *
+     * 为什么 think 不出胶囊：宿主那行本来就写着「深度求索中」，再贴一枚
+     * 「正在思考」是同一句话说两遍。胶囊只补宿主说不出来的三种情况。
+     */
+    function installStatus(translate) {
+      if (typeof document === 'undefined') return function () {};
+      const t = typeof translate === 'function' ? translate : fallbackTranslate;
+      const PHASE_ATTR = 'data-fh-phase';
+      const LABEL_ATTR = 'data-fh-phase-label';
+
+      const WRITE_WINDOW_MS = 1800;
+      const STALL_MS = 12000;
+
+      let current = null;
+      let timer = 0;
+      let lastActivityAt = Date.now();
+      let lastPhase = '';
+      let lastTextLength = -1;
+      let lastGrowthAt = 0;
+      let disposed = false;
+
+      function isEnabled() {
+        return document.documentElement.getAttribute(ATTR_STATUS) === 'on';
+      }
+
+      function runningElement() {
+        return document.querySelector('[data-chat-running="true"]');
+      }
+
+      function runningTool() {
+        return document.querySelector('[data-tool][data-state="running"]');
+      }
+
+      /**
+       * 胶囊挂在运行行最后那个孩子上（runningContent，display:flex）。
+       * 挂在最外层运行行上会被它的 column 排布挤成第三行（审计 #12），
+       * 而宿主这层结构是稳定的：读屏 span + divider + content。
+       */
+      function labelHost(run) {
+        const last = run.lastElementChild;
+        return last === null || last === undefined ? run : last;
+      }
+
+      function clear(el) {
+        if (el === null || el === undefined) return;
+        el.removeAttribute(PHASE_ATTR);
+        el.removeAttribute(LABEL_ATTR);
+      }
+
+      /**
+       * 采样助手正文的长度。两次采样之间变长了就记一次「刚刚在写」。
+       * 比监听 data-* 状态可靠：宿主不会为「正在流式输出」写任何属性，
+       * 但正文变长这件事一定会发生。
+       */
+      function sampleAssistantText() {
+        const nodes = document.querySelectorAll('[data-chat-flow-kind="assistant-step"]');
+        const last = nodes.length === 0 ? null : nodes[nodes.length - 1];
+        const length = last === null ? 0 : String(last.textContent || '').length;
+        if (lastTextLength >= 0 && length > lastTextLength) lastGrowthAt = Date.now();
+        lastTextLength = length;
+      }
+
+      function phaseNow() {
+        if (!isEnabled()) return null;
+        const run = runningElement();
+        if (run === null) return null;
+        const host = labelHost(run);
+        const tool = runningTool();
+        if (tool !== null) {
+          const name = tool.getAttribute('data-tool') || '';
+          const label = name.length > 0 ? t('phaseTool') + ' ' + name : t('phaseTool');
+          return { el: host, phase: 'tool', label };
+        }
+        const now = Date.now();
+        if (now - lastGrowthAt < WRITE_WINDOW_MS) {
+          return { el: host, phase: 'write', label: t('phaseWrite') };
+        }
+        if (now - lastActivityAt > STALL_MS) {
+          return { el: host, phase: 'stall', label: t('phaseStall') };
+        }
+        return { el: host, phase: 'think', label: '' };
+      }
+
+      function tick() {
+        if (disposed) return;
+        sampleAssistantText();
+        const next = phaseNow();
+        const nextEl = next === null ? null : next.el;
+        if (current !== null && current !== nextEl) {
+          clear(current);
+          current = null;
+        }
+        if (next === null) {
+          lastPhase = '';
+          return;
+        }
+        current = nextEl;
+        if (next.label.length === 0) {
+          clear(nextEl);
+          lastPhase = next.phase;
+          return;
+        }
+        const phaseKey = next.phase + '\u0000' + next.label;
+        if (phaseKey === lastPhase) return;
+        lastPhase = phaseKey;
+        if (nextEl.getAttribute(PHASE_ATTR) !== next.phase) {
+          nextEl.setAttribute(PHASE_ATTR, next.phase);
+        }
+        if (nextEl.getAttribute(LABEL_ATTR) !== next.label) {
+          nextEl.setAttribute(LABEL_ATTR, next.label);
+        }
+      }
+
+      // 「有没有动静」看对话流里的真实变化，不看运行行自己的计时器 ——
+      // 那一行每秒都在改「用时 N 分 N 秒」，把它当活动信号，stall 永远不可达
+      // （审计 #13）。所以观察回调里先排除运行行自己产生的变动。
+      let observer = null;
+      let observedRoot = null;
+
+      function insideRunningRow(node) {
+        let el = node === null || node === undefined ? null : node.nodeType === 1 ? node : node.parentElement;
+        while (el !== null && el !== undefined) {
+          if (el.getAttribute !== undefined && el.getAttribute('data-chat-running') === 'true') return true;
+          el = el.parentElement;
+        }
+        return false;
+      }
+
+      function onMutations(records) {
+        let real = false;
+        for (let i = 0; i < records.length; i += 1) {
+          const record = records[i];
+          if (insideRunningRow(record.target)) continue;
+          real = true;
+          break;
+        }
+        if (!real) return;
+        lastActivityAt = Date.now();
+        tick();
+      }
+
+      function startObserver() {
+        if (typeof MutationObserver !== 'function') return;
+        const root = document.querySelector('[data-conversation-scroll]');
+        if (root === null || root === observedRoot) return;
+        if (observer !== null) observer.disconnect();
+        observedRoot = root;
+        observer = new MutationObserver(onMutations);
+        observer.observe(root, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+      }
+
+      lastActivityAt = Date.now();
+      startObserver();
+      // 会话切换时 [data-conversation-scroll] 整个会重建（审计 #14），
+      // 所以这个心跳也负责「换绑 observer」；700ms 只做比较，开销可忽略。
+      timer = window.setInterval(() => {
+        startObserver();
+        tick();
+      }, 700);
+      tick();
+
+      return function () {
+        disposed = true;
+        if (timer !== 0) {
+          window.clearInterval(timer);
+          timer = 0;
+        }
+        if (observer !== null) {
+          observer.disconnect();
+          observer = null;
+        }
+        clear(current);
+        current = null;
+      };
+    }
+
+    /* ------------------------------------------------------------------ */
     /* 生命周期                                                            */
     /* ------------------------------------------------------------------ */
 
-    function install() {
+    function install(translate) {
       if (typeof document === 'undefined') return function () {};
       syncAttributes();
       const removeStylesheet = ensureStylesheet();
       const stopWatching = watchHostState();
+      const stopRail = installRailKeys(translate);
+      const stopStatus = installStatus(translate);
       return function () {
+        stopStatus();
+        stopRail();
         stopWatching();
         removeStylesheet();
         const root = document.documentElement;
         for (const attr of ALL_ATTRS) root.removeAttribute(attr);
         for (const name of ART_SCRIM_VARS) root.style.removeProperty(name);
+        root.style.removeProperty('--fh-veil');
       };
     }
 
@@ -385,6 +724,8 @@ window.__ModuleLoader__.load({
         bgNone: '纯色',
         opacityLabel: '插画强度',
         opacityHint: '插画透过画布的程度。文字发灰时可调低。',
+        veilLabel: '内容遮罩',
+        veilHint: '对话区压在插画上的那层水膜。觉得中间发黑就调低，0 为完全透明。',
         layoutLabel: '布局微调',
         layoutHint: '输入卡圆角与投影、对话列宽、会话头分隔线。',
         motionLabel: '动效',
@@ -397,6 +738,14 @@ window.__ModuleLoader__.load({
         statusFurina: '皮肤中心正在运行 furina 皮肤，本主题只做修补',
         statusOther: '别的皮肤正在运行，本主题不碰配色',
         statusHandoff: '检测到 claude-style 正在接管布局，本主题已让路',
+        railLabel: '对话导航',
+        railJump: '跳到第',
+        railHint: '给宿主右侧那列轮次刻度换成皮肤的水色，并支持 Alt+↑ / Alt+↓ 跳上一轮 / 下一轮。',
+        statusDetailLabel: '运行状态细节',
+        statusDetailHint: '回答进行中时，在「深度求索中」这行末尾补一枚小胶囊，说清楚正在调用哪个工具，或者是不是卡住了。',
+        phaseTool: '调用工具',
+        phaseWrite: '正在写回答',
+        phaseStall: '暂未响应',
         reset: '恢复默认',
         on: '开',
         off: '关',
@@ -412,6 +761,8 @@ window.__ModuleLoader__.load({
         bgNone: 'Flat',
         opacityLabel: 'Illustration strength',
         opacityHint: 'How much of the illustration shows through. Lower it if text feels washed out.',
+        veilLabel: 'Content veil',
+        veilHint: 'The water veil over the chat area. Lower it if the middle looks too dark; 0 is fully clear.',
         layoutLabel: 'Layout polish',
         layoutHint: 'Composer radius and shadow, chat column width, header divider.',
         motionLabel: 'Motion',
@@ -424,6 +775,14 @@ window.__ModuleLoader__.load({
         statusFurina: 'skin-center is running the furina skin; this theme only patches',
         statusOther: 'Another skin is active; this theme leaves colors alone',
         statusHandoff: 'claude-style is holding the layout; this theme stepped aside',
+        railLabel: 'Conversation navigation',
+        railJump: 'Jump to turn',
+        railHint: 'Restyle the host turn ticks beside the conversation, and add Alt+↑ / Alt+↓ to jump between turns.',
+        statusDetailLabel: 'Live status detail',
+        statusDetailHint: 'While a reply is running, append a small pill to the status line saying which tool is running, or that it has stalled.',
+        phaseTool: 'running tool',
+        phaseWrite: 'writing a reply',
+        phaseStall: 'no response yet',
         reset: 'Reset',
         on: 'On',
         off: 'Off',
@@ -561,6 +920,25 @@ window.__ModuleLoader__.load({
           ),
           h(
             Row,
+            {
+              name: t('veilLabel'),
+              hint: t('veilHint'),
+            },
+            h('input', {
+              className: 'fh-set-range',
+              type: 'range',
+              min: 0,
+              max: 100,
+              step: 5,
+              value: Math.round(prefs.veil * 100),
+              disabled: prefs.background !== 'art',
+              'aria-label': t('veilLabel'),
+              onChange: (event) => patch({ veil: Number(event.target.value) / 100 }),
+            }),
+            h('span', { className: 'fh-set-value' }, Math.round(prefs.veil * 100) + '%')
+          ),
+          h(
+            Row,
             { name: t('motionLabel'), hint: t('motionHint') },
             h(Segmented, {
               label: t('motionLabel'),
@@ -580,6 +958,24 @@ window.__ModuleLoader__.load({
               checked: prefs.layout,
               label: t('layoutLabel'),
               onChange: (value) => patch({ layout: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('railLabel'), hint: t('railHint') },
+            h(Switch, {
+              checked: prefs.rail,
+              label: t('railLabel'),
+              onChange: (value) => patch({ rail: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('statusDetailLabel'), hint: t('statusDetailHint') },
+            h(Switch, {
+              checked: prefs.status,
+              label: t('statusDetailLabel'),
+              onChange: (value) => patch({ status: value }),
             })
           )
         ),
@@ -609,17 +1005,29 @@ window.__ModuleLoader__.load({
     /* 插件入口                                                            */
     /* ------------------------------------------------------------------ */
 
-    function installSettings(ctx) {
-      if (h === null || ctx === undefined || ctx === null) return;
-
-      let t = fallbackTranslate;
+    /**
+     * 解析文案函数。宿主给了 locale 服务就用它，否则读 <html lang> 挑内置词典。
+     * 运行时（导航条标签、状态行）与设置面板共用同一个 t，避免两处文案漂移。
+     */
+    function resolveTranslate(ctx) {
       try {
-        if (ctx.locale !== undefined && ctx.locale !== null && typeof ctx.locale.bind === 'function') {
-          t = ctx.locale.bind(NS);
+        if (
+          ctx !== undefined &&
+          ctx !== null &&
+          ctx.locale !== undefined &&
+          ctx.locale !== null &&
+          typeof ctx.locale.bind === 'function'
+        ) {
+          return ctx.locale.bind(NS);
         }
       } catch (error) {
-        t = fallbackTranslate;
+        /* 落到内置词典 */
       }
+      return fallbackTranslate;
+    }
+
+    function installSettings(ctx, t) {
+      if (h === null || ctx === undefined || ctx === null) return;
 
       try {
         if (typeof ctx.effect === 'function' && ctx.locale !== undefined && ctx.locale !== null) {
@@ -652,12 +1060,16 @@ window.__ModuleLoader__.load({
     }
 
     function apply(ctx) {
+      const t = resolveTranslate(ctx);
       if (ctx !== undefined && ctx !== null && typeof ctx.effect === 'function') {
-        ctx.effect(install, PLUGIN_ID + ': furina surface');
+        ctx.effect(
+          () => install(t),
+          PLUGIN_ID + ': furina surface'
+        );
       } else {
-        install();
+        install(t);
       }
-      installSettings(ctx);
+      installSettings(ctx, t);
     }
 
     exports.apply = apply;

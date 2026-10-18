@@ -143,3 +143,116 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body { --dsw-alias-...: ..
 7. **不碰第三方插件的 DOM**：0.1.x 有过三条「隐藏吉祥物 / 封号彩蛋 / 桌宠」
    规则，0.3.0 全部删掉。主题只负责自己的表面；`[class*="_bubble"]` 那条实际上
    命中的是 dsh-pet 的气泡，等于在改别人的界面 —— 这类选择器一律不写。
+8. **原生窗口按钮的改法依赖宿主 preload 的实现细节**：我们压的是那个隐藏探针
+   `span` 的采样色，不是公开 API。宿主哪天换掉这套 `titleBarOverlay` 采样机制，
+   这条规则就会失效 —— 失效的形态是「按钮恢复默认底色」，不会误伤任何 HTML。
+
+---
+
+## 7. 0.4.1：三处「宿主已经有，但没做透」的地方
+
+这一版没有新增任何页面结构。三个新层都是「宿主已经画了，我们只补它没做的那一半」。
+判断标准很简单：**如果要靠自绘 DOM 才能做到，就先回头查宿主是不是已经有了。**
+
+### 7.1 对话导航条：先查宿主，别急着画
+
+开发期那版照着 claude-style 自绘了一列 `.fh-rail`，结果右侧同时挂着两列短横线、
+横向错开几十像素 ——「看着不像成品」的最大来源。
+宿主 `@deepseek-ai/dsh-client-ui-chat` 本来就有 TurnNavigator
+（`nav > div[class*="_scroller"] > div[class*="_marks"] > button[data-index]`），
+带 `aria-current`、hover 预览、虚拟滚动、上下淡出与减弱动效支持。
+
+0.4.1 起：**不创建任何 DOM**，只给那一条上色（R1–R3）。
+锚点用 `button[data-index]` 而不是 `.xpvNua_*` —— CSS-module 前缀是构建哈希，
+宿主升版本就变；`data-index` 是组件的语义契约（点击、aria、虚拟化都依赖它）。
+
+`Alt+↑ / ↓` 由 JS 实现（宿主没做键盘跳轮）。取法是「`[data-conversation-scroll]` 里所有
+`[data-chat-flow-kind="user"][data-chat-turn]`」，当前轮按「谁跨过视口顶部下方
+`min(120, 高度/3)` 那条探针线」判定（都不跨时取离探针最近的），跳转用
+`scrollTo({top, behavior})`、减弱动效下改成 `auto`。不读 `aria-current`：它跟着
+滚动更新会滞后，连按两次容易原地踏步。焦点在 `input / textarea /
+[contenteditable="true"]` 且里面**已有草稿**时直接让路；焦点在 `[role="dialog"]` /
+`[role="menu"]` 里时也不抢键。
+
+### 7.2 运行状态：写属性，不写节点
+
+宿主运行行（`div[data-chat-running="true"]`）已经写了「深度求索中，用时 N 分 N 秒」，
+还自带扫光、鲸鱼动画与 `role="status"` 的读屏文本。这一层**不替换文本**，只补
+宿主说不出来的三件事：正在调用哪个工具、正在写回答、12 秒没动静。
+
+两个细节决定了实现方式：
+
+1. **挂在哪个元素上**。运行行是 `flex-direction: column`（读屏 span + 发丝线 + 内容行），
+   `::after` 挂在最外层会被排成第三行，和输入卡上方的工具行叠成三层。所以属性
+   写到最后那个 `runningContent`（`display:flex`）上，`::after` 就是行末一个自然的
+   flex item，与「深度求索中」同基线，行高不增加。
+2. **为什么用属性而不是插节点**。运行行是 React 渲染的，塞子节点会在下一次重渲染
+   时被冲掉；`data-fh-phase` / `data-fh-phase-label` 不是 React 管理的东西，重渲染
+   不会碰它，插件卸载时删掉即可。CSS 侧用 `content: attr(data-fh-phase-label)` 把文本
+   画出来，文案仍由 JS 的 `t()` 决定（跟着 locale 走），CSS 里不硬编码任何一句话。
+
+**「卡住了」怎么判**：不能看运行行自己 —— 它每秒都在改「用时 N 分 N 秒」，永远有
+动静。要看对话流的真实 DOM 变动（`MutationObserver` on `[data-conversation-scroll]`），
+并在回调里**排除运行行内部产生的变动**，否则 stall 永远不可达。
+
+**思考阶段为什么不出胶囊**：宿主那行本来就写着「深度求索中」，再贴一枚「正在思考」
+是同一句话说两遍。胶囊只补宿主说不出来的状态 —— 这是「补」而不是「重画」的边界。
+
+### 7.3 原生窗口按钮：改的是探针的采样色
+
+Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 的
+`titleBarOverlay`，颜色由主进程 `setTitleBarOverlay({color, symbolColor})` 决定。
+宿主 preload 里有一段：创建隐藏探针 `span`，`background-color` 读
+`var(--dsw-specific-sidebar-fill)`，用 1×1 canvas 采样成 `rgba(...)`，通过 IPC
+`dsh-desktop:windows-appearance` 发给主进程。
+
+两种改法：
+
+- 改 `--dsw-specific-sidebar-fill` —— 不采用：侧栏底色跟着一起变，等于「为了三个
+  按钮改整个侧栏」；
+- 只压那个探针 span 的 `background-color` —— 采用：
+  `body > span[style*="--dsw-specific-sidebar-fill"]` 加
+  `background-color: transparent !important`（探针用内联样式，但**没有** `!important`，
+  CSS 的 `!important` 稳压它）。
+
+实测确认 alpha 真的生效：传 `rgba(0,0,0,0)` 时三个按钮直接浮在插画上、完全没有色块；
+传半透明灰会按比例混进去。宿主 preload 还监视 `head` 子树变化并在样式表插入后重发
+一次颜色 —— 所以样式表一 inject，按钮颜色就跟着变，不用等下一次主题切换。
+
+**一个坑**：`PrintWindow` 拍不到原生 caption，验证标题栏必须用 `CopyFromScreen`
+抓真实屏幕。
+
+### 7.4 水膜浓度：从「公式」改成「一个滑块」
+
+改动前的水膜中心 alpha 是 `calc(暗色中段纱 + 0.24)` ≈ 0.81 —— 压在插画上是一块很重的
+墨色，用户第一反应是「中间为什么这么黑」。它原本是「保证正文对比度」的推导结果，
+但是按**最坏情况**（插画最亮处）算的，对实际这张图偏保守。
+
+0.4.1 改成：中心 alpha = `--fh-veil`（默认 0.4），两侧 84% 处乘 0.84，两端淡出到 0；
+设置面板给一个 0–100% 滑块，0 = 完全透明。默认 0.4 时，`#dbe2f2` 的正文压在
+`rgb(10 15 27 / .4)` 上对比度仍有 ~9:1，远超 WCAG AA。
+
+**为什么允许 0 而「插画强度」下限是 0.1**：插画强度调到 0 等于背景图不可见但
+`background-image` 还在（白占一层合成），语义上应该改用「纯色」模式；而水膜调到 0
+是合法且常用的诉求（「我要看清插画」），不该被下限挡住。
+
+### 7.5 精修层：只在「宿主画对了、但不到位」的地方动手
+
+`src/15-polish.css`（P1–P7）不新增结构、不改几何，只补质感。两条纪律：
+
+- **亮色规则必须写 `body:not([data-ds-dark-theme])`**：`data-ds-dark-theme` 挂在
+  `body` 上，写在 `<html>` 上的 `:not()` 永远为真 —— 开发期那版会话头因此把暗色界面
+  涂出一条 75px 灰白亮带。
+- **模糊只在插画模式开**：渐变/纯色模式的画布本身干净，再叠 `backdrop-filter` 只会
+  让标题发毛，所以 `backdrop-filter` 规则都挂在 `[data-dsh-furina-bg="art"]` 下。
+
+---
+
+## 8. 版本之间
+
+| 版本 | 主题 |
+| --- | --- |
+| 0.1.0 | 单套配色 + 布局 + 动效，自插 `ui-skin-furina-style` |
+| 0.2.0 | 设置进 DeepSeek 设置界面、默认插画背景、修输入框悬空 |
+| 0.3.0 | 细节层（代码/表格/工具行/占位）；删掉三个「替别的插件做内容策略」的开关 |
+| 0.4.1 | 精修层、宿主自带导航条上色 + `Alt+↑/↓`、运行状态小胶囊、水膜滑块、窗口按钮去黑底 |

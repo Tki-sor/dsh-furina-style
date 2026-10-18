@@ -52,6 +52,10 @@ html[data-dsh-furina] {
   --fh-blur-soft: 2px;
   --fh-scale-dialog: 0.96;
   --fh-scale-menu: 0.98;
+  --fh-scale-press: 0.97;
+
+  /* ---- 几何：输入卡圆角（宿主面板是 28px，卡片比它小一号才像独立的水面） ---- */
+  --fh-radius-composer: 18px;
 
   /* ---- 层级：只在本插件的自绘装饰上用 ---- */
   --fh-layer-control: 10;
@@ -68,6 +72,8 @@ html[data-dsh-furina][data-dsh-furina-motion="reduced"] {
   --fh-dur-enter: 0.01ms;
   --fh-dur-exit: 0.01ms;
   --fh-dur-move: 0.01ms;
+  /* --fh-dur-breathe 不清零：它只被 infinite 呼吸动画引用，而 20-motion.css
+     的 M11 媒体查询会把 animation-duration 压到 0.01ms（审计 #16）。 */
   --fh-nudge: 0px;
   --fh-travel: 0px;
   --fh-rise: 0px;

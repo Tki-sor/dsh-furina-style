@@ -78,6 +78,51 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
   background: transparent !important;
 }
 
+/* ---------------------------------------------------------------------------
+   B. 正文水膜：给文字一条能安心读的底
+   ---------------------------------------------------------------------------
+   0.4.0 把中间列清成完全透明之后，插画会从正文底下直接穿上来 —— 背景是
+   蓝紫色海天加人像，正文压在上面读久了累（用户反馈「效果不太好」）。
+   但也不该把插画整块盖掉：皮肤的价值就在那层水色里。
+
+   折中做法：在**滚动视口**上垫一层横向渐变的水膜 —— 左右两端淡出到透明，
+   中间是稳定的水色，于是两侧留白（各约 134px）还能看到插画，正好落在
+   文字下面的是干净的水面。滚动的仍然是里面那层内容，视口背景不动，
+   所以水膜不会跟着滚走。
+
+   画在 [data-conversation-scroll] 而不是 [data-chat-flow]：后者是随内容
+   滚动的那层，给它加背景会被滚出视口。
+
+    浓度由 --fh-veil 控制（0..1，设置面板的「内容遮罩」滑块）：中心就是
+   --fh-veil 本身，两侧 11%/89% 处乘 0.84 略微稀一点，两端淡出到 0。
+   默认 0.4 —— 比 0.4.0 那版（当时是 0.81）淡一半，插画能透出来，
+    正文对比度仍然够（#dbe2f2 压在 rgb(10 15 27 / .4) 上约 9:1）。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  [data-conversation-scroll] {
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgb(10 15 27 / calc(var(--fh-veil, 0.4) * 0.84)) 11%,
+    rgb(10 15 27 / var(--fh-veil, 0.4)) 50%,
+    rgb(10 15 27 / calc(var(--fh-veil, 0.4) * 0.84)) 89%,
+    transparent 100%
+  );
+}
+
+html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]
+  body:not([data-ds-dark-theme])
+  [data-conversation-scroll] {
+  background-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgb(247 250 255 / calc(var(--fh-veil, 0.4) * 0.84)) 11%,
+    rgb(247 250 255 / var(--fh-veil, 0.4)) 50%,
+    rgb(247 250 255 / calc(var(--fh-veil, 0.4) * 0.84)) 89%,
+    transparent 100%
+  );
+}
+
 /* composer 的 sticky 渐变带是「用底色把滚动内容压住」的，底色没了就会变成
    一条灰带；改成透明 → 让插画直接透上来。 */
 html[data-dsh-furina][data-dsh-furina-surfaces="own"][data-dsh-furina-bg="art"]

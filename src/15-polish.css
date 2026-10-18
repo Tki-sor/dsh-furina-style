@@ -1,0 +1,244 @@
+/* ============================================================================
+   dsh-furina-style — 15. 精修
+   ----------------------------------------------------------------------------
+   这一层只做「宿主已经画对了、但质感不到位」的地方，不新增结构、不改几何：
+     P1 会话头：标题与标签页浮在插画上的可读性
+     P2 标签页：悬停水膜 + 激活下划线的渐变与圆头
+     P3 侧栏：选中行的水色、行悬停
+     P4 输入卡控件：模型 / 权限 / 附件按钮的悬停与按压
+     P5 行尾操作条：复制、重答之类的按钮手感
+     P6 弹层与菜单的指针反馈
+
+   选择器纪律：能用 data-* 属性锚定就不用 CSS-module 类名（宿主换版本时
+   `Dc7zOa_` 这类前缀会变，属性更稳）。所有规则都在 layout=on 下生效。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   P1 会话头
+   ----------------------------------------------------------------------------
+   宿主把会话头做成 76px 高的一行（标题行 + 标签页），底色透明。插画模式下
+   标题直接压在插画纹理上，对比度会掉。这里加一层自上而下的水色纱 + 轻毛玻璃，
+   只在插画模式生效：渐变/纯色模式下画布本身是干净的，不需要这层。
+   -------------------------------------------------------------------------- */
+
+/* 毛玻璃只在插画模式生效：渐变/纯色模式下画布本身干净，再叠一层模糊只会
+   让标题发毛（审计 #60）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-bg="art"]
+  header:has([data-conversation-tabs]) {
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+}
+
+/* 暗色：一层薄的水下墨色，往下淡出，和插画的上下渐变接得上。
+   注意 `data-dsh-furina*` 挂在 <html> 上、`data-ds-dark-theme` 挂在 <body> 上，
+   所以必须写成 html[…] body[…] 的两级组合，不能都写在同一层。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-bg="art"]
+  body[data-ds-dark-theme]
+  header:has([data-conversation-tabs]) {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(12 18 32 / 0.32) 0%,
+    rgb(12 18 32 / 0.18) 62%,
+    transparent 100%
+  );
+}
+
+/* 亮色：一层偏冷的白雾。
+   注意必须把 body 写进选择器里 —— `data-ds-dark-theme` 挂在 body 上，
+   挂在 html 上的 `:not([data-ds-dark-theme])` 永远为真（0.4.0 的 bug：
+   暗色界面因此被涂了一条 75px 高的灰白亮带，审计 #4）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-bg="art"]
+  body:not([data-ds-dark-theme])
+  header:has([data-conversation-tabs]) {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(238 242 250 / 0.6) 0%,
+    rgb(238 242 250 / 0.34) 62%,
+    transparent 100%
+  );
+}
+
+/* 标题行的排印：宿主给的是 16px/400、字距 normal。加一点负字距和字重，
+   让它读起来像标题而不是正文（只动第一段，不动右侧的智能体团队徽标）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.session.header"]
+  > :first-child
+  > :first-child {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ----------------------------------------------------------------------------
+   P2 标签页（对话 / 轨迹）
+   ----------------------------------------------------------------------------
+   宿主的 tab 是「文字 + 2px 下划线」，没有悬停反馈。补一层绝对定位的水膜：
+   用 ::before 画，不占布局，因此不会把下划线顶偏。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]::before {
+  content: "";
+  position: absolute;
+  inset: -5px -9px 4px -9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 11%, transparent);
+  opacity: 0;
+  transition: opacity var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+  pointer-events: none;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]:hover::before,
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]:focus-visible::before {
+  opacity: 1;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"][aria-selected="true"]::before {
+  opacity: 0;
+}
+
+/* 激活下划线：从实色改为「左浓右淡」的水光，两端收圆。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"][aria-selected="true"]::after {
+  border-radius: 999px;
+  background-image: linear-gradient(
+    90deg,
+    var(--dsw-alias-state-business-primary) 0%,
+    color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, transparent) 100%
+  );
+}
+
+/* ----------------------------------------------------------------------------
+   P3 侧栏
+   ----------------------------------------------------------------------------
+   宿主选中行的底色是 `rgba(255,255,255,0.08)` —— 中性灰，在蓝紫色的侧栏里显脏。
+   换成水色：选中偏浓、悬停偏淡，并且在左侧留一道更亮的竖线当作「当前位置」。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="treeitem"] {
+  transition: background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="treeitem"]:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 9%,
+    transparent
+  );
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="treeitem"][aria-selected="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 17%,
+    transparent
+  );
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent) 0%,
+    transparent calc(100% - 34%)
+  );
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--dsw-alias-brand-primary) 72%, transparent);
+}
+
+/* ----------------------------------------------------------------------------
+   P4 输入卡控件
+   ----------------------------------------------------------------------------
+   模型按钮、权限按钮、左侧附件按钮实测都是 h=28 / radius=8 / 透明底，悬停时
+   只有指针变化。这里给统一的悬停水膜与按压回弹。
+   注意只锚定这三个槽位：右侧是主按钮（实心品牌色），不该被水膜盖一层。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-composer-card]
+  :is(
+    [data-slot="conversation.input.model"],
+    [data-slot="conversation.input.permission"],
+    [data-slot="conversation.input.left"],
+    [data-slot="conversation.input.plan"]
+  )
+  button {
+  border-radius: var(--dsw-radius-sm, 8px);
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    transform var(--fh-dur-instant, 80ms) var(--fh-ease-out, ease-out);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-composer-card]
+  :is(
+    [data-slot="conversation.input.model"],
+    [data-slot="conversation.input.permission"],
+    [data-slot="conversation.input.left"],
+    [data-slot="conversation.input.plan"]
+  )
+  button:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 13%,
+    transparent
+  );
+  color: var(--dsw-alias-label-primary);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-composer-card]
+  :is(
+    [data-slot="conversation.input.model"],
+    [data-slot="conversation.input.permission"],
+    [data-slot="conversation.input.left"],
+    [data-slot="conversation.input.plan"]
+  )
+  button:active {
+  transform: scale(var(--fh-scale-press, 0.97));
+}
+
+/* ----------------------------------------------------------------------------
+   P5 行尾操作条（复制 / 重答 / 分支…）
+   ----------------------------------------------------------------------------
+   悬停时才出现的一排 28px 小按钮，宿主只给了一个 6px 内边距，没有任何底色。
+   补水膜 + 文字提亮，让「这一排东西可以点」这件事在视觉上说清楚。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail] button {
+  border-radius: var(--dsw-radius-sm, 8px);
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail] button:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 14%,
+    transparent
+  );
+  color: var(--dsw-alias-label-primary);
+}
+
+/* ----------------------------------------------------------------------------
+   P6 弹层与菜单
+   ----------------------------------------------------------------------------
+   宿主菜单项高度 32px、无悬停过渡。给菜单项和弹层里的普通按钮补同样的
+   水膜 + 曲线，让「菜单」和「聊天区」的手感是一个东西。
+   -------------------------------------------------------------------------- */
+
+/* 圆角与最小高度归 10-layout.css 的 L6 管（8px / 32px），这里只补指针反馈，
+   两处都写 border-radius 会互相打架（审计 #3）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [role="menuitem"]:focus-visible {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 15%,
+    transparent
+  );
+}
+
+/* ----------------------------------------------------------------------------
+   P7 正文里的控件一致性
+   ----------------------------------------------------------------------------
+   正文中的按钮（「复制代码」、表格里的操作）宿主没统一圆角，这里补一次。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.chat.node"]
+  button:hover {
+  color: var(--dsw-alias-label-primary);
+}

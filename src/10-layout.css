@@ -19,21 +19,62 @@
    的 sidebar-fill，整窗就会被涂平、盖住背景插画（blue-fantasy #1803）。
    这里把 frame 的涂色让回去，改由 body 的画布背景负责。
    ------------------------------------------------------------------------- */
-html[data-dsh-furina][data-dsh-furina-layout="on"] [class*="_frame"] {
+/* 只针对最外层那一个 frame（`[data-slot="root"]` 的直接子元素），不能用
+   [class*="_frame"] 一刀切：实测宿主里带 _frame 后缀的类有 6 个，其中
+   BynINW_frame 是窗口骨架、xz4KEq_frame 是对话列骨架（要透明），但还有
+   BMNXqa_frame（HTML 正文预览）、qWvkEq_frame（浏览器面板）、
+   jIHOOq_frame（子代理输入条）、Nhu-QW_frame（图片占位）——它们各自有
+   合法底色，一刀切会把正文预览和浏览器面板也涂成透明（审计 #2）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="root"]
+  > [class*="_frame"] {
   background: transparent !important;
 }
 
 /* 注意：[data-windows-titlebar] 挂在 <html> 自己身上（不是中间某层），所以
    下面两条必须把它写进 html 的复合选择器里，否则 `[data-windows-titlebar]
    [class*="_frame"]` 会去找 html 的子孙里带这个属性的元素 —— 实测 0 命中。 */
-html[data-dsh-furina][data-dsh-furina-layout="on"][data-windows-titlebar] [class*="_frame"]::before {
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-windows-titlebar]
+  [data-slot="root"]
+  > [class*="_frame"]::before {
   background: transparent !important;
 }
 
 /* 标题栏本身保留一点点毛玻璃，让窗口有边缘感 */
-html[data-dsh-furina][data-dsh-furina-layout="on"][data-windows-titlebar] [class*="_frame"] {
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-windows-titlebar]
+  [data-slot="root"]
+  > [class*="_frame"] {
   --fh-titlebar-veil: color-mix(in srgb, var(--dsw-alias-bg-base) 72%, transparent);
   background-image: linear-gradient(to bottom, var(--fh-titlebar-veil) 0, transparent var(--dsh-windows-titlebar-height, 40px)) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   L1b. 右上角三个窗口按钮：不要那块黑底
+   ---------------------------------------------------------------------------
+   那三个按钮不是 HTML，是 Electron 的**原生** titleBarOverlay（DWM 画的），
+   所以既不能用 CSS 选中它们，也没法给它们加 hover 样式。
+
+   宿主 preload 里有一段探针代码：往 body 塞一个 span（内联
+   `background-color: var(--dsw-specific-sidebar-fill)`），读它的计算色，
+   再通过 IPC 让主进程 setTitleBarOverlay({color, symbolColor})。
+   也就是说 —— **原生按钮的底色 = 那个探针 span 的 background-color**。
+
+   我们自己的样式表也能选中那个 span（它是 body 的直接子元素，内联样式里
+   带着 --dsw-specific-sidebar-fill 这个变量名），于是把它的底色改成透明，
+   原生遮罩就跟着透明，三个按钮直接浮在插画上。
+
+   实测（真实屏幕截图 A/B，不是 PrintWindow）：alpha 是生效的 —— 传
+   rgba(0,0,0,0) 时按钮区没有任何色块；传半透明灰/红则按比例混入。
+   symbolColor 仍走 span 的 color（= --dsw-alias-label-primary），深浅色都够读。
+
+   注意 specificity：探针 span 是内联样式（非 !important），我们用
+   html[...] 前缀 + !important 稳压；preload 的 MutationObserver 监视 head
+   与 body 属性变化，我们的样式表插进 head 时会触发它重发一次颜色。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > span[style*="--dsw-specific-sidebar-fill"] {
+  background-color: transparent !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -52,16 +93,21 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation
   gap: 26px;
 }
 
+/* 不用 opacity 压暗：整元素半透明会把 tab 的文字与下划线一起拉低对比度
+   （暗色下 border-l4 已经只有 1.99:1，再乘 0.72 就到 1.4:1，审计 #6）。
+   改成只动颜色 —— 未选中是 label-tertiary，悬停 label-secondary，
+   选中态由宿主给 state-business-primary。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"] {
-  transition:
-    color var(--fh-dur-feedback) var(--fh-ease-standard),
-    opacity var(--fh-dur-feedback) var(--fh-ease-standard);
-  opacity: 0.72;
+  color: var(--dsw-alias-label-tertiary);
+  transition: color var(--fh-dur-feedback) var(--fh-ease-standard);
 }
 
-html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"]:hover,
+html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"]:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
 html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"][aria-selected="true"] {
-  opacity: 1;
+  color: var(--dsw-alias-state-business-primary);
 }
 
 html[data-dsh-furina][data-dsh-furina-layout="on"] header:has([data-conversation-tabs]) [role="tab"][aria-selected="true"]::after {
@@ -116,8 +162,10 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-tail][data-actions
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card] {
   /* 宿主默认用 --dsw-radius-panel(28px)，那是「一整块面板」的圆角；
      输入卡比面板小一号才像一张独立的水面（claude-style 同款 18px）。 */
-  border-radius: 18px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--fh-radius-composer, 18px);
+  /* 底色是 specific-input-major（亮 #fff / 暗 #1a2238），只加 0.5px 发丝线就够；
+     再叠 1px 实边会造成「双线」（审计 #18）。 */
+  border: 0;
   background: var(--dsw-specific-input-major);
   box-shadow:
     0 0 0 0.5px color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent),
@@ -158,7 +206,8 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-card]:focus-wi
    ------------------------------------------------------------------------- */
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-composer-seat] {
   /* 仅保留一个语义化变量供其他规则引用，不驱动任何 padding。 */
-  --fh-composer-fade-h: 36px;
+  /* 曾经在这里写 --fh-composer-fade-h 给自绘渐变现用；0.2.0 起改用宿主
+     自己的 composer 渐变，这个变量已无消费者，删掉（审计 #58）。 */
 }
 
 /* ---------------------------------------------------------------------------
@@ -234,9 +283,12 @@ html[data-dsh-furina] body[data-ds-dark-theme] ::selection {
   color: #0c1220;
 }
 
+/* 焦点环走宿主契约（我们已在 tokens 里把 --dsw-focus-ring-color 设成品牌色；
+   宿主默认是 transparent，所以必须显式给值）。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"] :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--fh-brand) 62%, transparent);
-  outline-offset: 1px;
+  outline: var(--dsw-focus-ring-width, 2px) solid
+    color-mix(in srgb, var(--dsw-focus-ring-color, var(--fh-brand)) 72%, transparent);
+  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------------------
