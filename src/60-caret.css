@@ -1,0 +1,72 @@
+/* ----------------------------------------------------------------------------
+   C1. 平滑输入光标
+   ----------------------------------------------------------------------------
+   系统光标是「瞬移 + 自带闪烁」，没有过渡。这里的做法是把它藏起来，自己画一条
+   2px 的竖线，跟着选区末端走（transform 80ms 缓动），再用 1s 步进闪烁模拟原生
+   节奏 —— 和 claude-style 里的那套「平滑输入」是同一个原理（它也没有输入文字
+   动画，`typing` / `input-fade` 之类的关键字在它的样式表里命中为 0）。
+
+   为什么不能只用 CSS：`caret-color` 只控制颜色，光标位置由浏览器排版决定，
+   没有任何可动画的接口，所以必须由一个 JS 安装器把位置量出来写进 transform。
+
+   安全边界（三条，缺一条都会出事故）：
+   1. 只在 `[data-composer-input]`（宿主输入区）内生效。设置页、搜索框、
+      重命名输入框一律不碰，保持系统光标。
+   2. 让路给 claude-style 时整体失效（`[data-dsh-furina-handoff]`）。那边已经有
+      一套一模一样的光标层，两层叠着会看到「双影 / 拖尾」。
+   3. `caret-color: transparent` 不挂在开关上，而是挂在 **JS 亲手打上的**
+      `[data-dsh-furina-caret-active]` 上：只有「层建好并且成功定过一次位」的
+      那个输入元素才会把系统光标藏起来。任何一步失败（容器 display:contents、
+      选不到 selection、元素被卸载）都自动退回系统光标，而不是「没有光标」。
+      这一条是整个特性里唯一不能省的安全阀。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-caret="on"]:not([data-dsh-furina-handoff]) [data-composer-input][data-dsh-furina-caret-active] {
+  caret-color: transparent;
+}
+
+/* 安装器给定位容器补 position:relative（宿主给的容器已经是 relative，这里是兜底）。
+   写在 html 前缀外面，因为它只由 JS 在需要时挂上，不会误伤别的元素。 */
+html[data-dsh-furina] [data-dsh-furina-caret-host] {
+  position: relative;
+}
+
+[data-dsh-furina-caret-layer] {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 2px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 1px;
+  box-sizing: content-box !important;
+  background: var(--fh-caret-color, var(--dsw-alias-state-business-primary, currentColor)) !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  will-change: transform;
+  transition: transform var(--fh-dur-instant, 80ms) var(--fh-ease-glide, ease);
+  animation: fh-caret-blink 1s step-end infinite;
+}
+
+[data-dsh-furina-caret-layer][data-fh-caret-visible] {
+  visibility: visible !important;
+}
+
+/* 与原生节奏一致的「方波」闪烁：step-end 让它在 0/50% 两态之间硬切，而不是淡入淡出。 */
+@keyframes fh-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 减弱动效：20-motion.css 的 M11 会把 duration 压到 0.01ms（闪烁消失、移动瞬移），
+   这里只补一条更明确的：光标保持常亮，不做任何闪动。 */
+html[data-dsh-furina][data-dsh-furina-motion="reduced"] [data-dsh-furina-caret-layer] {
+  animation: none;
+  transition: none;
+}

@@ -773,7 +773,98 @@ rect 恒为 0×0，所以给卡面改 background/gap 不会让任何插槽错位
 
 ---
 
-## 14. 版本之间
+## 14. 0.9.0：9px 的幻影溢出，与一根会滑动的光标
+
+一条旧规则在 250px 宽的盒子里撑出 9px，把宿主的渐隐诱发了；另一件事是给
+`contenteditable` 画一根会滑动的光标。
+
+### 14.1 9px 从哪来：`::before` 装进 `overflow: auto` 容器的代价
+
+0.4.1 的精修层 P2 想给宿主标签补一层悬停水膜，写法是「绝对定位伪元素往外撑」：
+
+```css
+[role="tab"]::before { content: ""; position: absolute; inset: -5px -9px 4px -9px; }
+```
+
+这套写法在会话头的两个标签上没问题 —— 父级 `overflow: visible`，伪元素溢出
+多少都不进布局。但右侧 dock 的标签**也是 `role="tab"`**（live 实测
+`roleTabTotal = 3`：对话、轨迹、dock 标签），它的父级 `_stripTabs_` 是
+`overflow-x: auto` 的滚动容器：伪元素向右溢出的 9px 直接变成 `scrollWidth`
+的一部分。
+
+于是 `clientWidth 251 / scrollWidth 260`。宿主看到「还有 9px 可以滚」，就给
+整条 strip 挂上 24px 的右端渐隐（`[data-dockkit-strip-scroll=end]` 那条），
+把标签文字最后几个字和关闭叉一起吃掉。
+
+排除过程（全部 live 注入）：改标签宽度 → 仍 +9；去掉标题右内边距 → +9；
+隐藏关闭叉 → 不变；清掉 margin → 不变；`overflow: hidden` → 不变；
+`data-dsh-furina-layout="off"` → **251 / 251，幻影消失**。
+最后用 `[data-dockkit-pane] [role="tab"]::before { content: none }` 一击命中：
+`251 / 251`，恢复 `content` 后回到 `260`。
+
+**判别法**：给一个元素加带负 inset 的绝对定位伪元素之前，先看它的**父级**
+有没有 `overflow` 不等于 `visible`。`overflow: visible` 的溢出是「画出去但不算数」，
+`overflow: auto` 的溢出是「既画出去又算进 `scrollWidth`」。
+
+修法是两层：
+
+1. P2 五条规则全部收窄到 `[data-conversation-tabs] [role="tab"]` —— 只给真正
+   想要的对话 / 轨迹标签；
+2. K8 独立兜底：单标签的标签条 `mask-image: none`。这一条与 P2 的修复相互独立，
+   覆盖「将来又有别的东西撑出溢出」的情况。
+
+为什么 0.7.2 没修好？因为 0.7.2 只改了**标签自己**的 mask（渐隐起点从右 −30px
+收到右 −16px），而真正盖住文字的是**标签条那一层**的 24px 渐隐。眼睛看到的是
+「文字淡了」，代码里是两层 mask 叠加，只改一层等于没改。
+
+### 14.2 平滑光标：为什么不能纯 CSS，也不能只抄一半
+
+claude-style 的输入光标是自绘的：系统光标 `caret-color: transparent` 藏掉，
+换一层绝对定位的 2px div，读 `selection.getRangeAt(0).getClientRects()` 的
+**最后一个矩形**定位置，靠 `transition: transform 80ms` 滑动，每次落位后把
+闪烁动画的 `currentTime` 归零。
+
+为什么不能纯 CSS？光标位置不是任何 CSS 表达式能算出来的量 —— 它依赖浏览器
+内部的文本排版与选区，只有 Selection API 拿得到。
+
+我们照抄结构，但重写了三处：
+
+**（1）安全阀优先于好看。** 藏系统光标是唯一「一旦失败用户就没法打字」的操作。
+所以 `caret-color: transparent` 挂的不是配置项，而是 JS **成功定过位之后**才写上的
+`[data-dsh-furina-caret-active]`：
+
+```css
+html[data-dsh-furina][data-dsh-furina-caret="on"]:not([data-dsh-furina-handoff])
+  [data-composer-input][data-dsh-furina-caret-active] { caret-color: transparent; }
+```
+
+任何一步失败（父级 `display: contents`、selection 不可用、测不到矩形），这个
+属性就不会出现，系统光标原样保留。**最坏情况是「特性没生效」，不是「光标没了」。**
+
+**（2）三级测量兜底。** 宿主的输入框是 lexical 的 `contenteditable`，空内容时
+selection 的矩形高度是 0。所以顺序是：selection 末矩形 → 前后各取 1 字符的
+probe range → 内容盒左上角，高度回落到 20px。
+
+**（3）跟事件走，不轮询。** 监听 `selectionchange` / `beforeinput` / `input` /
+`keydown` / `keyup` / `pointerdown` / `scroll` / `resize` / `compositionend`。
+`compositionend` 是给中文输入法的 —— 拼音候选期间 selection 停在组合区，
+`selectionchange` 在候选落定那一刻不一定触发。
+
+首次显示时先把 `transition-property` 设成 `none`、写完位置、下一帧再恢复，
+否则第一帧会从 (0, 0) 滑到光标处。claude-style 里也是同一个处理 —— 这是
+「首帧不飞入」的标准写法。
+
+### 14.3 这一版没有做的事
+
+- 没做「打字时文字淡入 / 打字机」。claude-style 里没有这类动画（`typing` /
+  `typed` / `text-in` 在整个 bundle 里 0 命中），用户说的「平滑输入效果」
+  就是光标那一层的位移 + 闪烁。
+- 没动 lexical 的 `contenteditable` 自身样式（`padding` / `line-height` 由
+  0.8.0 的 C2 负责）—— 光标层是它的兄弟节点，不参与输入框排版。
+
+---
+
+## 15. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -787,3 +878,5 @@ rect 恒为 0×0，所以给卡面改 background/gap 不会让任何插槽错位
 | 0.7.1 | dock 标签条三处错位（全局细滚动条压掉宿主 `none`）、标签宽度上限 170→280px |
 | 0.7.2 | dock 标签标题不再被 hover/active 态 mask 白吃一截：装得下就完整显示 |
 | 0.8.0 | 会话头按钮抬进原生标题栏（纯 CSS + `env()`）、输入区独立成卡；两个开关 |
+| 0.9.0 | dock 标签不再被自己撑出的 9px 幻影溢出诱发宿主渐隐；平滑输入光标（自绘层 + 80ms 滑动 + 1s 步进闪烁）；一个新开关 |
+

@@ -211,10 +211,8 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="
       它是「按标签总宽 170px 设计」的补丁：170px 时文字本来就该被截断，渐隐
       正好盖住截断口。可我们把标签放宽后文字装得下（实测文本 194.5px < 盒
       215.5px），这条 mask 就变成纯粹的损失——把能显示的字符也淡掉了。
-      实测：fadeStart(标题右-30)=1081.2，文本右边界 1087.2 → 末尾 6px 落在
-      渐隐区、14px 落在关闭叉底下。
 
-   修法（两条都要，缺一不可）：
+   修法（a 必须、b 是兜底）：
      a. 给标题留出关闭叉的位置：`padding-inline-end:16px`。
         关闭叉占右侧 24px（right:4px + 20px），标题内容盒已经距标签右边界
         10px，所以再让出 16px 后，文字右边界落在关闭叉左侧 2px 处。
@@ -236,4 +234,27 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="
   padding-inline-end: 16px;
   mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+
+/* ----------------------------------------------------------------------------
+   K8. 单标签的 dock 不该有「右端渐隐」
+   ----------------------------------------------------------------------------
+   宿主给整条标签条挂渐隐（`[data-dockkit-strip-scroll=end]` → 24px 从右边界
+   往左），本意是提示「右边还有标签」。但只有一个标签时它没有任何提示价值，
+   反而是纯损失：渐隐区正好压在最后一个标签的文字尾和关闭叉上（用户截图里
+   那个「文字被吃掉 + × 发灰」的红框就是它）。
+
+   K8 只处理「标签条里只有一个标签」这一种最常见的形态；多标签时保留宿主
+   的渐隐，滚动提示仍然有效。
+
+   为什么 0.7.2 没修好：那次只改了标题自己的 mask（右-30px → 右-16px），
+   而真正盖住文字的是**标签条这一层**的 24px 渐隐 —— 它跟标题 mask 叠加，
+   于是「文字尾部 + ×」一起变淡。这一层的另一个触发源（我们 P2 给
+   `[role="tab"]::before` 的 -9px 横向 inset 撑出 9px 幻影溢出）已在
+   `15-polish.css` 的 P2 里收窄到会话标签，不再波及 dock；K8 是不依赖那个
+   修复的独立兜底。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_stripTabs_"]:has(> [class*="_tab_"]:only-child) {
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
 }

@@ -92,9 +92,16 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
    ----------------------------------------------------------------------------
    宿主的 tab 是「文字 + 2px 下划线」，没有悬停反馈。补一层绝对定位的水膜：
    用 ::before 画，不占布局，因此不会把下划线顶偏。
+
+   ⚠️ 选择器必须限定在 `[data-conversation-tabs]` 里（会话头那两颗「对话 / 轨迹」）。
+   右侧边栏（dockkit）的标签也是 `role="tab"`，而它的父级 `_stripTabs_` 是
+   `overflow-x:auto` 的容器：下面 ::before 的 `inset: … -9px …` 会向右撑出 9px
+   幻影溢出（实测 scrollWidth 251→260），宿主于是给整条 strip 挂上 24px 渐隐
+   mask（`[data-dockkit-strip-scroll=end]`），把标签文字尾和关闭叉一起吃掉 ——
+   用户看到的「标签显示不全」根因就在这里。收窄后 dock 标签不再被波及。
    -------------------------------------------------------------------------- */
 
-html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]::before {
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-tabs] [role="tab"]::before {
   content: "";
   position: absolute;
   inset: -5px -9px 4px -9px;
@@ -105,17 +112,17 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]::before {
   pointer-events: none;
 }
 
-html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]:hover::before,
-html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"]:focus-visible::before {
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-tabs] [role="tab"]:hover::before,
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-tabs] [role="tab"]:focus-visible::before {
   opacity: 1;
 }
 
-html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"][aria-selected="true"]::before {
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-tabs] [role="tab"][aria-selected="true"]::before {
   opacity: 0;
 }
 
 /* 激活下划线：从实色改为「左浓右淡」的水光，两端收圆。 */
-html[data-dsh-furina][data-dsh-furina-layout="on"] [role="tab"][aria-selected="true"]::after {
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-conversation-tabs] [role="tab"][aria-selected="true"]::after {
   border-radius: 999px;
   background-image: linear-gradient(
     90deg,

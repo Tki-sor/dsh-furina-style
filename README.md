@@ -42,6 +42,74 @@
 > **0.8.0 起**：会话头那两个按钮（「用文件资源管理器打开」+「更多操作」）
 > 搬进 Windows 原生标题栏，和窗口三键同一行；输入框从「一整块大卡」改成
 > 宿主式的**输入区独立成卡 + 工具行浮在卡下**，两件事都能在设置里关掉。
+> **0.9.0 起**：右侧边栏的标签文字不再被渐隐吃掉（根因是我们自己一条
+> `::before` 撑出的 9px 幻影溢出）；输入框里换成**平滑移动的光标**
+> （自绘一条细线跟着走，保留原生 1s 闪烁），可在设置里关掉。
+
+### 0.9.0 做了什么
+
+两个 bug 级修复，其中一个的根因居然在我们自己身上。
+
+#### 一、右侧边栏的标签为什么显示不全
+
+用户报的现象：「标签文字最后几个字是淡的，关闭叉 × 还落在一条暗色块里。」
+
+渐隐本身是**宿主的**：`_stripTabs_` 是 `overflow-x: auto` 的容器，宿主在它身上挂
+`mask-image: linear-gradient(to right, black calc(100% - 24px), transparent)`，
+由 `[data-dockkit-strip-scroll=end]` 触发 —— 意思是「右边还有看不见的标签，往右
+可以滚」。单标签时它是纯损失。
+
+但 24px 的渐隐**只该在真的溢出时触发**，而实测 `clientWidth 251 / scrollWidth 260`
+—— 多出来的 9px 从哪来？逐项排除：改标签宽度 → 仍 +9；去掉标题右内边距 → +9；
+隐藏关闭叉 → 不变；清掉 margin → 不变；`overflow: hidden` → 不变。
+把 `data-dsh-furina-layout` 切成 `off` → **`251 / 251`，幻影消失**。
+
+于是它只能是本插件的东西。0.4.1 的精修层 P2 给**宿主所有 `role="tab"`** 加了
+一张绝对定位的水膜：
+
+```css
+[role="tab"]::before { content: ""; position: absolute; inset: -5px -9px 4px -9px; }
+```
+
+右侧边栏的 dock 标签**也是 `role="tab"`**（live 实测 `roleTabTotal=3`：对话、轨迹、
+dock 标签）。这个 `::before` 左右各溢出 9px，在 `overflow: visible` 的会话头上
+无所谓，但装进 `overflow-x: auto` 的 `_stripTabs_` 里就变成 9px 的 scrollWidth
+幻影 —— 恰好把宿主的 24px 渐隐骗了出来。
+
+修法：把 P2 的五条规则全部收窄到 `[data-conversation-tabs] [role="tab"]`，
+只给对话 / 轨迹那两个标签用。再加一条**独立兜底** K8：单标签的标签条直接
+`mask-image: none`，这样即使将来又有什么东西撑出溢出，也不会再吃掉文字。
+
+#### 二、平滑输入光标
+
+claude-style 的输入框里，光标不是「闪现」而是一小段 80ms 的位移，同时保留原生的
+1s 步进闪烁。它的实现值得整段搬：
+
+- 系统光标藏掉（`caret-color: transparent`），换一条自绘的 2px 细线；
+- 细线是一层 `position: absolute` 的 div，靠 `transform: translate()` 移动，
+  `transition: transform 80ms`；
+- 位置来自 `document.getSelection()` → `getRangeAt(0).getClientRects()` 的**最后
+  一个矩形**（多行时就是光标所在那一行）；
+- 每次写入位置后把闪烁 `animation.currentTime = 0` 重启，所以「移动时在走、
+  停下来在闪」两个动作不打架；
+- 首次显示前先把 `transition-property` 临时设成 `none`，否则第一帧会从 (0,0)
+  飞过来。
+
+我们照这个结构写了一份（`src/60-caret.css` + `src/client.js` 里的 `installCaret()`），
+但有三处刻意不同：
+
+1. **安全阀**：`caret-color: transparent` 只挂在 JS **亲手打上**的
+   `[data-dsh-furina-caret-active]` 元素上 —— 只有「层建好了、而且成功定过一次位」
+   才藏系统光标。测量失败（比如富文本结构变化）就自动退回原生光标，不会出现
+   「光标消失」的最坏情况。
+2. **三级测量兜底**：selection 末矩形 → 前后各取 1 个字符的 probe range →
+   内容盒左上角。宿主输入框是 lexical 的 contenteditable，空内容时 selection
+   矩形高度是 0，第二/第三级就是给这种边界用的。
+3. **跟事件走而不是轮询**：`selectionchange` / `beforeinput` / `input` / `keydown` /
+   `keyup` / `pointerdown` / `scroll` / `resize` / `compositionend` 全部监听
+   （`compositionend` 是给中文输入法补的），不跑 `requestAnimationFrame` 循环。
+
+设置里对应一个新开关「平滑输入光标」，默认开。关掉即刻恢复系统光标。
 
 ### 0.8.0 做了什么
 
@@ -365,6 +433,7 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
 | 运行状态细节 | 开 / 关 | 运行行末尾那枚「调用工具 / 正在写回答 / 暂未响应」小胶囊 |
 | 标题栏放操作按钮 | 开 / 关 | 把「用文件资源管理器打开」+「更多操作」抬进 Windows 原生标题栏。默认开 |
 | 输入框独立成卡 | 开 / 关 | 输入区自己一张 14px 小卡、工具行浮在卡下；关掉回宿主一整块大卡。默认开 |
+| 平滑输入光标 | 开 / 关 | 把系统光标换成自绘的一条细线，跟着位置平滑滑动，保留原生 1s 闪烁。默认开 |
 | 我发送的图片 | 100 – 480 px | 你自己发出去的图最大多高。默认 240 |
 | AI 发送的图片 | 120 – 600 px | 助手回复里插入的图最大多高。默认 360（= 宿主原值） |
 | 我发送的图片排布 | 并列 / 堆叠 | 连续多张图怎么摆。默认**并列**（横排 + 横向滚动条） |
@@ -398,7 +467,8 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
   "imageLayoutUser": "row",
   "imageLayoutAssistant": "row",
   "headerBand": true,
-  "composerFramed": true
+  "composerFramed": true,
+  "caretMotion": true
 }
 ```
 
@@ -407,7 +477,7 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
 0.4.1 之后、0.5 之前存的配置没有 `imageUser` / `imageAssistant` / `quoteTint` /
 `quoteAlpha`，0.5 之后、0.6 之前存的配置没有 `imageLayoutUser` /
 `imageLayoutAssistant`，0.7 系列存的配置没有 `headerBand` / `composerFramed`，
-读入时都会自动补上。
+0.8 系列存的配置没有 `caretMotion`，读入时都会自动补上。
 
 0.1.0 只存过 `dsh-furina:motion`，升级时会自动迁移一次，然后删掉旧键。
 读不到 localStorage（隐私模式、禁用存储）时全部回落到内置默认值，不报错。
@@ -532,8 +602,9 @@ dsh-furina-style/
 │   ├── 50-details.css    # 细节层（行内代码/表格/工具行/占位文案）
 │   ├── 55-rail.css       # 对话导航条（宿主 TurnNavigator 的上色）
 │   ├── 56-status.css     # 运行状态行的小胶囊（S1）
-│   ├── 57-dock.css       # 右侧 dock 面板（K1–K6，磨砂 + 标签条对齐修正）
-│   └── client.js         # 偏好读写 / 属性同步 / 设置面板 / 样式注入模板
+│   ├── 57-dock.css       # 右侧 dock 面板（K1–K8，磨砂 + 标签条对齐/渐隐修正）
+│   ├── 60-caret.css      # 平滑输入光标（自绘层的外观与闪烁）
+│   └── client.js         # 偏好读写 / 属性同步 / 设置面板 / 光标安装器 / 样式注入模板
 ├── lib/client.js         # 构建产物（GENERATED）
 ├── scripts/build.mjs     # 零依赖构建脚本
 ├── locale/{zh,en}.json

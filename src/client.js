@@ -71,6 +71,8 @@ window.__ModuleLoader__.load({
     const ATTR_BAND = 'data-dsh-furina-band';
     /** 输入卡样式：framed（输入区独立成卡）/ host（宿主原样一张大卡）。 */
     const ATTR_COMPOSER = 'data-dsh-furina-composer';
+    /** 平滑输入光标：on / off（关掉用回系统光标）。 */
+    const ATTR_CARET = 'data-dsh-furina-caret';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -87,6 +89,7 @@ window.__ModuleLoader__.load({
       ATTR_IMG_AI,
       ATTR_BAND,
       ATTR_COMPOSER,
+      ATTR_CARET,
       ATTR_HANDOFF,
     ];
 
@@ -144,6 +147,7 @@ window.__ModuleLoader__.load({
       imageLayoutAssistant: 'row', // row | stack —— AI 发送的图片怎么排
       headerBand: true, // 会话头操作按钮抬进 Windows 原生标题栏
       composerFramed: true, // 输入区独立成卡（输入框一张卡，工具行一排控件）
+      caretMotion: true, // 平滑输入光标（自绘层 + 80ms 滑动 + 1s 步进闪烁）
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
@@ -221,6 +225,8 @@ window.__ModuleLoader__.load({
           input.composerFramed === undefined
             ? PREFS_DEFAULT.composerFramed
             : Boolean(input.composerFramed),
+        caretMotion:
+          input.caretMotion === undefined ? PREFS_DEFAULT.caretMotion : Boolean(input.caretMotion),
       };
     }
 
@@ -375,6 +381,7 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_IMG_AI, prefs.imageLayoutAssistant);
       setAttr(root, ATTR_BAND, prefs.headerBand ? 'on' : 'off');
       setAttr(root, ATTR_COMPOSER, prefs.composerFramed ? 'framed' : 'host');
+      setAttr(root, ATTR_CARET, prefs.caretMotion ? 'on' : 'off');
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -770,6 +777,354 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ */
+    /* 平滑输入光标                                                         */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 把宿主输入区的系统光标换成自绘的一条竖线，让它跟着选区末端平滑滑动。
+     *
+     * 为什么不只用 CSS：`caret-color` 只能改颜色，光标位置由浏览器排版决定，
+     * 没有任何可以动画的接口 —— 位置必须由 JS 量出来再写 transform。
+     *
+     * 三条安全边界（都在 60-caret.css 的注释里写了原因）：
+     *   1. 只作用于 `[data-composer-input]`；设置页/搜索框保持系统光标。
+     *   2. `data-dsh-furina-handoff`（让路给 claude-style）时整体停用，
+     *      否则两边各画一条，会看到双影。
+     *   3. 只有「层建好并且成功定过一次位」才给输入元素挂
+     *      `data-dsh-furina-caret-active`（CSS 靠它把系统光标变透明）。
+     *      这样任何一步失败都退回系统光标，而不是「没有光标」。
+     */
+    function installCaret() {
+      if (typeof document === 'undefined' || typeof window === 'undefined') return function () {};
+
+      const INPUT_SELECTOR = '[data-composer-input]';
+      const HOST_ATTR = 'data-dsh-furina-caret-host';
+      const LAYER_ATTR = 'data-dsh-furina-caret-layer';
+      const ACTIVE_ATTR = 'data-dsh-furina-caret-active';
+      const VISIBLE_ATTR = 'data-fh-caret-visible';
+      const COLOR_VAR = '--fh-caret-color';
+      /** 空行量不到矩形时用的兜底行高（宿主 13.3px 字号 + 24px 行高）。 */
+      const FALLBACK_HEIGHT = 20;
+
+      let disposed = false;
+      let frame = 0;
+      let layer = null;
+      let host = null;
+      let target = null;
+      let observed = null;
+      let painted = false;
+      let pendingFrame = 0;
+
+      function isEnabled() {
+        const root = document.documentElement;
+        return (
+          root.getAttribute(ATTR_CARET) === 'on' && !root.hasAttribute(ATTR_HANDOFF)
+        );
+      }
+
+      function activeInput() {
+        const active = document.activeElement;
+        if (active === null || active === undefined) return null;
+        if (typeof active.matches !== 'function' || !active.matches(INPUT_SELECTOR)) return null;
+        if (!active.isContentEditable) return null;
+        return active;
+      }
+
+      function caretColor(el) {
+        let color = '';
+        try {
+          color = window.getComputedStyle(el).caretColor || '';
+        } catch (error) {
+          color = '';
+        }
+        if (color === '' || color === 'auto' || /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(color)) {
+          try {
+            color = window.getComputedStyle(el).color || '';
+          } catch (error) {
+            color = '';
+          }
+        }
+        return color;
+      }
+
+      /**
+       * 量出光标矩形。collapsed range 在空行/元素边界上会返回空列表，
+       * 所以三级兜底：range rects → 前后一个字符 → 输入框内容盒左上角。
+       */
+      function measure(el) {
+        const selection = document.getSelection();
+        if (selection === null || selection === undefined) return null;
+        if (selection.rangeCount === 0 || !selection.isCollapsed) return null;
+        const range = selection.getRangeAt(0);
+        if (!el.contains(range.startContainer)) return null;
+
+        const height = (function () {
+          try {
+            const value = parseFloat(window.getComputedStyle(el).lineHeight);
+            return isFinite(value) && value >= 8 ? value : FALLBACK_HEIGHT;
+          } catch (error) {
+            return FALLBACK_HEIGHT;
+          }
+        })();
+
+        const rects = range.getClientRects();
+        if (rects.length > 0) {
+          const rect = rects[rects.length - 1];
+          if (rect.width >= 0 && rect.height >= 1) {
+            return { left: rect.left, top: rect.top, height: rect.height };
+          }
+        }
+
+        const node = range.startContainer;
+        const offset = range.startOffset;
+        if (node.nodeType === 3) {
+          const text = node.textContent || '';
+          if (text.length > 0) {
+            const start = Math.max(0, Math.min(offset, text.length) - 1);
+            const probe = document.createRange();
+            probe.setStart(node, start);
+            probe.setEnd(node, Math.min(text.length, start + 1));
+            const probeRects = probe.getClientRects();
+            if (probeRects.length > 0) {
+              const box = probeRects[probeRects.length - 1];
+              const atRightEdge = start + 1 <= offset;
+              return { left: atRightEdge ? box.right : box.left, top: box.top, height: box.height };
+            }
+          }
+        } else if (node.nodeType === 1 && node.childNodes.length > 0) {
+          const index = Math.min(offset, node.childNodes.length - 1);
+          const child = node.childNodes[index];
+          if (child !== null && child !== undefined) {
+            const box = child.getBoundingClientRect();
+            if (box.height >= 1) return { left: box.left, top: box.top, height: box.height };
+          }
+        }
+
+        const elBox = el.getBoundingClientRect();
+        let paddingLeft = 0;
+        let paddingTop = 0;
+        try {
+          const cs = window.getComputedStyle(el);
+          paddingLeft = parseFloat(cs.paddingLeft) || 0;
+          paddingTop = parseFloat(cs.paddingTop) || 0;
+        } catch (error) {
+          paddingLeft = 0;
+          paddingTop = 0;
+        }
+        return { left: elBox.left + paddingLeft, top: elBox.top + paddingTop, height: height };
+      }
+
+      function destroyLayer() {
+        if (target !== null) {
+          target.removeAttribute(ACTIVE_ATTR);
+          target = null;
+        }
+        if (layer !== null && layer.parentNode !== null) layer.parentNode.removeChild(layer);
+        layer = null;
+        host = null;
+        painted = false;
+      }
+
+      function ensureLayer(el) {
+        if (target === el && layer !== null && layer.isConnected) return layer;
+        destroyLayer();
+        const parent = el.parentElement;
+        if (parent === null || parent === undefined) return null;
+        let style = null;
+        try {
+          style = window.getComputedStyle(parent);
+        } catch (error) {
+          return null;
+        }
+        // display:contents 的盒子没有自己的坐标系，没法在里面绝对定位。
+        if (style.display === 'contents') return null;
+        if (style.position === 'static') parent.setAttribute(HOST_ATTR, '');
+        const div = document.createElement('div');
+        div.setAttribute(LAYER_ATTR, '');
+        div.setAttribute('aria-hidden', 'true');
+        div.style.height = FALLBACK_HEIGHT + 'px';
+        parent.appendChild(div);
+        layer = div;
+        host = parent;
+        target = el;
+        painted = false;
+        const color = caretColor(el);
+        if (color !== '') layer.style.setProperty(COLOR_VAR, color);
+        return div;
+      }
+
+      /** 每次把光标挪到新位置都重置闪烁相位，避免「刚好落在透明半周期」。 */
+      function restartBlink() {
+        if (layer === null || typeof layer.getAnimations !== 'function') return;
+        const animations = layer.getAnimations();
+        for (let i = 0; i < animations.length; i += 1) {
+          const animation = animations[i];
+          if (animation.animationName === 'fh-caret-blink') {
+            try {
+              animation.currentTime = 0;
+            } catch (error) {
+              /* 忽略：动画可能已被移出 */
+            }
+          }
+        }
+      }
+
+      function paint(el, rect) {
+        if (layer === null || host === null) return;
+        const hostBox = host.getBoundingClientRect();
+        const x = rect.left - hostBox.left - host.clientLeft + host.scrollLeft;
+        const y = rect.top - hostBox.top - host.clientTop + host.scrollTop;
+        const height = Math.max(8, Math.round(rect.height));
+        // 第一次出现时禁用过渡，否则会从 (0,0) 飞过来。
+        if (!painted) {
+          layer.style.transitionProperty = 'none';
+          layer.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+          layer.style.height = height + 'px';
+          layer.setAttribute(VISIBLE_ATTR, '');
+          painted = true;
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(function () {
+              if (layer === null || disposed) return;
+              layer.style.transitionProperty = '';
+            });
+          } else {
+            layer.style.transitionProperty = '';
+          }
+        } else {
+          layer.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+          layer.style.height = height + 'px';
+          layer.setAttribute(VISIBLE_ATTR, '');
+        }
+        if (el.getAttribute(ACTIVE_ATTR) !== '') el.setAttribute(ACTIVE_ATTR, '');
+        restartBlink();
+      }
+
+      function hide() {
+        if (layer !== null) layer.removeAttribute(VISIBLE_ATTR);
+        if (target !== null) target.removeAttribute(ACTIVE_ATTR);
+        painted = false;
+      }
+
+      function run() {
+        pendingFrame = 0;
+        if (disposed) return;
+        if (!isEnabled()) {
+          destroyLayer();
+          return;
+        }
+        const el = activeInput();
+        if (el === null) {
+          hide();
+          return;
+        }
+        if (ensureLayer(el) === null) {
+          hide();
+          return;
+        }
+        // 输入元素被重新挂载 / 内容切换后，颜色可能变了，重新取一次。
+        const color = caretColor(el);
+        if (color !== '') layer.style.setProperty(COLOR_VAR, color);
+        const rect = measure(el);
+        if (rect === null) {
+          hide();
+          return;
+        }
+        paint(el, rect);
+      }
+
+      function schedule() {
+        if (disposed || pendingFrame !== 0) return;
+        if (typeof window.requestAnimationFrame !== 'function') {
+          run();
+          return;
+        }
+        pendingFrame = window.requestAnimationFrame(run);
+      }
+
+      function scheduleLater() {
+        window.setTimeout(schedule, 120);
+      }
+
+      function onScroll(event) {
+        // 只有输入区自己滚动才需要重画（光标跟着内容走）。
+        const node = event.target;
+        if (node === target || (target !== null && node !== null && node.contains !== undefined && node.contains(target))) {
+          schedule();
+        }
+      }
+
+      function observeInput(el) {
+        if (typeof MutationObserver !== 'function') return;
+        if (observed !== null) observed.disconnect();
+        observed = new MutationObserver(schedule);
+        observed.observe(el, { childList: true, subtree: true, characterData: true });
+      }
+
+      function onFocusIn(event) {
+        const el = event.target;
+        if (el !== null && el !== undefined && typeof el.matches === 'function' && el.matches(INPUT_SELECTOR)) {
+          observeInput(el);
+        }
+        scheduleLater();
+      }
+
+      function onSelectionChange() {
+        schedule();
+      }
+
+      function onFocusOut() {
+        scheduleLater();
+      }
+
+      const listeners = [
+        ['selectionchange', onSelectionChange, false],
+        ['focusin', onFocusIn, true],
+        ['focusout', onFocusOut, true],
+        ['beforeinput', schedule, true],
+        ['input', schedule, true],
+        ['keydown', schedule, true],
+        ['keyup', schedule, true],
+        ['pointerdown', schedule, true],
+        ['scroll', onScroll, true],
+        ['resize', schedule, false],
+        ['compositionend', schedule, true],
+      ];
+
+      for (let i = 0; i < listeners.length; i += 1) {
+        const entry = listeners[i];
+        document.addEventListener(entry[0], entry[1], { capture: entry[2], passive: true });
+      }
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(function () {
+          if (!disposed) schedule();
+        });
+      }
+      schedule();
+
+      return function () {
+        disposed = true;
+        if (pendingFrame !== 0 && typeof window.cancelAnimationFrame === 'function') {
+          window.cancelAnimationFrame(pendingFrame);
+          pendingFrame = 0;
+        }
+        if (frame !== 0) {
+          window.clearTimeout(frame);
+          frame = 0;
+        }
+        for (let i = 0; i < listeners.length; i += 1) {
+          const entry = listeners[i];
+          document.removeEventListener(entry[0], entry[1], { capture: entry[2] });
+        }
+        if (observed !== null) {
+          observed.disconnect();
+          observed = null;
+        }
+        destroyLayer();
+        if (host !== null && host.hasAttribute(HOST_ATTR)) host.removeAttribute(HOST_ATTR);
+      };
+    }
+
+    /* ------------------------------------------------------------------ */
     /* 生命周期                                                            */
     /* ------------------------------------------------------------------ */
 
@@ -780,7 +1135,9 @@ window.__ModuleLoader__.load({
       const stopWatching = watchHostState();
       const stopRail = installRailKeys(translate);
       const stopStatus = installStatus(translate);
+      const stopCaret = installCaret();
       return function () {
+        stopCaret();
         stopStatus();
         stopRail();
         stopWatching();
@@ -849,6 +1206,8 @@ window.__ModuleLoader__.load({
         headerBandHint: '把会话头右侧那两个按钮（打开文件夹 / 更多操作）抬进 Windows 窗口顶部那行标题栏，标题因此多出一点空间。窗口太窄时会自动退回原位。',
         composerFramedLabel: '输入框独立成卡',
         composerFramedHint: '输入框自己有边界和焦点光，附件、模型、发送那排控件浮在它下面。关掉就回到宿主原来的一整张大卡。',
+        caretMotionLabel: '平滑输入光标',
+        caretMotionHint: '把系统光标换成自绘的一条细线，跟着光标位置平滑滑动，并保持原生的 1s 闪烁。关掉用回系统光标。',
         quoteLabel: '引用块',
         quoteHint: '正文里「> 引用」那一段的底色。水色最贴合这套皮肤，嫌抢眼可以换更淡的或直接关掉。',
         quoteWater: '水色',
@@ -908,6 +1267,8 @@ window.__ModuleLoader__.load({
         headerBandHint: 'Lift the two header buttons (open folder / more actions) into the Windows caption row so the title gets more room. Falls back to its own row on narrow windows.',
         composerFramedLabel: 'Framed composer',
         composerFramedHint: 'The input gets its own frame and focus glow, with the attachment, model and send controls floating underneath. Turn off to restore the host\u2019s single large card.',
+        caretMotionLabel: 'Smooth caret',
+        caretMotionHint: 'Replaces the system caret with a thin drawn line that slides to the new position instead of jumping, keeping the native 1s blink. Turn off to use the system caret.',
         quoteLabel: 'Blockquote',
         quoteHint: 'Tint behind “>” quotes. Water matches the skin best; pick a softer one or turn it off.',
         quoteWater: 'Water',
@@ -1127,6 +1488,15 @@ window.__ModuleLoader__.load({
               checked: prefs.composerFramed,
               label: t('composerFramedLabel'),
               onChange: (value) => patch({ composerFramed: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('caretMotionLabel'), hint: t('caretMotionHint') },
+            h(Switch, {
+              checked: prefs.caretMotion,
+              label: t('caretMotionLabel'),
+              onChange: (value) => patch({ caretMotion: value }),
             })
           ),
           h(
