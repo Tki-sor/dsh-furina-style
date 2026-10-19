@@ -37,6 +37,37 @@
 > 统一收进蓝紫色阶。
 > **0.7.1 起**：右侧边栏标签条的三处错位修好了 —— 右上角三个图标按钮与标签
 > 共线、「+」不再偏下、那条假的横向滚动条消失，长标题也能展开到 280px。
+> **0.7.2 起**：标签标题不再被渐隐 mask 白吃一截 —— 只有真的装不下才渐隐，
+> 装得下就完整显示，关闭叉与文字之间留出干净的 2px。
+
+### 0.7.2 做了什么
+
+- **标签标题「右边又被吞了」，是两件事叠在一起**：
+
+  1. **宿主在 active/hover 态无条件挂渐隐**。`._tabActive_6nhg2_346 ._tabTitle_6nhg2_389`
+     和 `:hover` / `:focus-within` 用的是同一个 `mask-image`：
+     `linear-gradient(to right, #000 calc(100% - 30px), transparent calc(100% - 14px))`
+     —— 那 30px 是给绝对定位的 `_tabClose_`（20px 宽 + right:4px）让位的。
+     问题在于它**不检查文字是否真的溢出**（宿主只在 `[data-dockkit-tab-clipped]`
+     时才该渐隐，而实测全页 `clippedEls=0`）；
+  2. **0.7.1 把标签放宽到 280px 后，多数标题其实装得下**。实测标题盒 215.5px、
+     文本自然宽只有 194.5px —— 文字根本没溢出，但那 30px 渐隐照样生效，
+     把末尾 6px 吃掉、再叠上关闭叉的 14px，「右边被吞」就是这两处之和。
+
+- **修法**：给非 quiet 标签的 `_tabTitle_` 加 `padding-inline-end: 16px`，
+  同时把 mask 的渐隐起点从 `calc(100% - 30px)` 收到 `calc(100% - 16px)`。
+
+  - 16px 的来历：关闭叉宽 20px、`right:4px`，需要让位的是 20 −（标签 padding 10）
+    ≈ 10px，再留一点呼吸 → 16px 足够；比起 30px 多还给文字 14px。
+  - `padding-inline-end` 必须一起加：只改 mask 会让渐隐区压在关闭叉上，
+    文字会贴着 × 继续延伸。
+  - 实测（长标题 `furina-skin-improvement-plan-amp.md` 场景）：短标题
+    `textRight = fadeStart = 1066.2 → lossless=true`，文字与关闭叉间距 2px；
+    长标题仍按宿主原有语义渐隐（`scrollWidth > clientWidth` 时才损失），
+    不会假装装得下。
+
+- **为什么加 `:not([class*="_tabQuiet_"])`**：首页那个「开始」标签是 quiet 变体，
+  没有关闭叉，宿主明确给它 `mask-image: none` —— 用 16px 去挤它纯属无中生有。
 
 ### 0.7.1 做了什么
 

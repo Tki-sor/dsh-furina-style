@@ -574,7 +574,88 @@ item（`flex:0 1 auto`），它的宽度本身取决于内容宽度，于是百�
 
 ---
 
-## 12. 版本之间
+## 12. 0.7.2：「字装得下却被渐隐」—— 宿主的 mask 不看溢出
+
+### 12.1 症状与两个叠加原因
+
+0.7.1 把标签宽度从 280px 放开后，长文件名能展开了，但用户立刻发现
+「标题框右边又被吞了」：文字末尾没有省略号，而是**渐渐消失**，后面紧挨着
+关闭叉。
+
+实测（桌面实例、dock 一条标签、文本 `furina-skin-improvement-plan.md`）：
+
+```
+tab    230.5px  x=861.7 .. 1092.2
+title  210.5px  x=871.7 .. 1082.2   padding: 0 10px（标签的）
+text   194.5px  right = 1066.2      ← 文本自然宽，Range 量的
+mask   linear-gradient(to right, #000 calc(100% - 16px), transparent)
+close   20x20   x=1068.2 .. 1088.2  position:absolute; top:4px; right:4px
+```
+
+两件事叠在一起：
+
+1. **宿主在 active / hover 态无条件挂 mask**：
+   ```css
+   ._tabActive_6nhg2_346 ._tabTitle_6nhg2_389,
+   ._tab_6nhg2_134:hover ._tabTitle_6nhg2_389,
+   ._tab_6nhg2_134:focus-within ._tabTitle_6nhg2_389 {
+     mask-image: linear-gradient(to right,
+       black calc(100% - 30px), transparent calc(100% - 14px));
+   }
+   ```
+   那 30px 是给绝对定位的关闭叉让位的。宿主另有一条
+   `[data-dockkit-tab-clipped]` 规则（`calc(100% - 16px)`）才代表「真的溢出」，
+   但 active 这条**不检查溢出就直接生效**。实测全页 `clippedEls = 0`。
+2. **0.7.1 放宽标签后大多数标题其实装得下**：标题盒 215.5px、文本 194.5px。
+   宿主那条渐隐起点 = 1082.2 − 30 = 1052.2，而文本右边界 1066.2 —— 末尾
+   14px 落在渐隐区、再被关闭叉压掉 14px，「右边被吞」是这两处之和。
+
+### 12.2 修法：还文字 14px，但保留关闭叉的让位
+
+```css
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-dockkit-pane] [class*="_tab_"]:not([class*="_tabQuiet_"])
+  [class*="_tabTitle_"] {
+  padding-inline-end: 16px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+```
+
+三个决定：
+
+- **为什么是 16px**：关闭叉 20px 宽、`right:4px`，真正需要让位的是
+  `20 − 标签左 padding 10 ≈ 10px`，再留呼吸 → 16px。相对宿主的 30px
+  多还给文字 14px。
+- **为什么必须同时加 `padding-inline-end`**：只把 mask 收紧到
+  `calc(100% - 16px)`，文字会继续向 × 底下延伸。加了 padding 后标题的内容盒
+  右边界正好等于渐隐起点，**文字一毫米不丢**。A/B 实测：
+  ```
+  clean : pad=16 tabW=230.5 textRight=1066.2 fadeStart=1052.2 lost=true
+  fixed : pad=16 tabW=230.5 textRight=1066.2 fadeStart=1066.2 lost=false
+          close.left=1068.2 → 文字与 × 间距 2px
+  ```
+- **为什么加 `:not([class*="_tabQuiet_"])`**：首页那个「开始」标签是 quiet
+  变体，没有关闭叉，宿主明确写 `mask-image: none`。给它塞 16px padding
+  是无中生有地挤掉可用宽度。
+
+超长标题仍然会渐隐（`scrollWidth > clientWidth` 时文本被裁剪），这是宿主的
+本意 —— 我们的目标是「**装得下就别渐隐**」，不是「永远不渐隐」。
+
+### 12.3 一条可复用的判别法：mask 类规则要单独问「它在什么条件下成立」
+
+宿主的裁剪提示通常有两套：一套按真实溢出开关（属性选择器
+`[data-*-clipped]`），一套按交互状态无条件挂上（`:hover` / `.*Active`）。
+**后者在「容器被主题改宽」之后会变成纯粹的损失** —— 它假设的几何
+（窄标签必然溢出）被我们的 `max-width` 改掉了，但规则本身不知道。
+
+所以改完任何宽度/字号之后，顺带用 `Range.selectNodeContents()` 量一遍
+`textRect`，和 mask 的渐隐起点比一下：`textRect.right > fadeStart` 就是
+既损失可读性、又没有换来任何裁切保护的无用渐隐。
+
+---
+
+## 13. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -586,3 +667,4 @@ item（`flex:0 1 auto`），它的宽度本身取决于内容宽度，于是百�
 | 0.6.0 | 连续多图默认横排 + 横向滚动条；我发的 / AI 发的可分别选并列或堆叠 |
 | 0.7.0 | 右侧 dock 面板磨砂化、22 个别名 token 补色、`data-state="failed"` 死规则改为 `running` |
 | 0.7.1 | dock 标签条三处错位（全局细滚动条压掉宿主 `none`）、标签宽度上限 170→280px |
+| 0.7.2 | dock 标签标题不再被 hover/active 态 mask 白吃一截：装得下就完整显示 |

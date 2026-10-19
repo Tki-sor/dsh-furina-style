@@ -191,3 +191,49 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"] {
   max-width: 280px;
 }
+
+/* ----------------------------------------------------------------------------
+   K7. 标签标题的「右边被吞」
+   ----------------------------------------------------------------------------
+   0.7.1 把标签上限放宽到 280px 后，标题能展开了，但最后一个字符仍被吃掉。
+   原因是宿主的两件事叠在一起：
+
+   1. 关闭叉是绝对定位、叠在标题右端
+      `._tabClose_6nhg2_417{position:absolute;top:4px;right:4px;width:20px}`，
+      而标题是 `flex:1 1 auto` 且内容是 `display:flex`，其内容盒右边界
+      = 标签右边界 - 10px(标签 padding)。实测（桌面实例，dock 429 宽）：
+        标题 871.7..1087.2，关闭叉 1073.2..1093.2 → 两者重叠 14px。
+      也就是说文字天然会跑到关闭叉底下。
+
+   2. 宿主用 mask 遮掉这段重叠
+      `._tabActive_ ._tabTitle_`（0,2,0）挂
+      `linear-gradient(to right, black calc(100% - 30px), transparent calc(100% - 14px))`。
+      它是「按标签总宽 170px 设计」的补丁：170px 时文字本来就该被截断，渐隐
+      正好盖住截断口。可我们把标签放宽后文字装得下（实测文本 194.5px < 盒
+      215.5px），这条 mask 就变成纯粹的损失——把能显示的字符也淡掉了。
+      实测：fadeStart(标题右-30)=1081.2，文本右边界 1087.2 → 末尾 6px 落在
+      渐隐区、14px 落在关闭叉底下。
+
+   修法（两条都要，缺一不可）：
+     a. 给标题留出关闭叉的位置：`padding-inline-end:16px`。
+        关闭叉占右侧 24px（right:4px + 20px），标题内容盒已经距标签右边界
+        10px，所以再让出 16px 后，文字右边界落在关闭叉左侧 2px 处。
+     b. 把 mask 的渐隐起点从「右-30px」改成「右-16px」，即正好在文字允许的
+        右边界上：文字装得下时渐隐区是空的（不伤字形），文字装不下时渐隐
+        正好从截断点开始（仍有柔化，不是硬切）。
+
+   实测（同一探针，注入这两条后）：
+     短标题：tabW 235.5→251.5，标题 215.5→231.5，文本右边界 == fadeStart，
+             关闭叉在文本右侧 2px → 完整显示。
+     长标题：文本 324.6px > 可用宽度 → 仍渐隐，行为与宿主一致，不再硬切。
+
+   作用域：只给「有关闭叉的标签」加。`_tabQuiet_` 变体（例如首页那个「开始」
+   tab）没有关闭叉、宿主也明确给它 `mask-image:none`，不能拿这里的 16px 去
+   挤它。`_tab_` 不会误伤 `_tabStrip_`/`_tabTitle_`，因为需要 `_tab_` 这个
+   带尾下划线的子串。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"]:not([class*="_tabQuiet_"]) [class*="_tabTitle_"] {
+  padding-inline-end: 16px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
