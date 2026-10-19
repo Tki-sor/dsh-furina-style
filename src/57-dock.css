@@ -1,0 +1,147 @@
+/* ============================================================================
+   dsh-furina-style — 57. 右侧 dock 面板（终端 / 文件 / 浏览器那一栏）
+   ----------------------------------------------------------------------------
+   宿主 @deepseek-ai/dsh-client-ui-dockkit 的面板结构：
+
+     div[data-dockkit-surface]
+       └ div[data-dockkit-host][data-dockkit-column="0"]
+           └ section[data-dockkit-pane]        ← 我们唯一要上色的表面
+               ├ header[class*="_tabHostHeader_"]
+               │   └ div[class*="_tabStrip_"]
+               │       ├ div[class*="_stripTabs_"]
+               │       │   └ div[class*="_tab_"][class*="_tabActive_"]
+               │       ├ button[class*="_addTab_"]
+               │       └ button[class*="_iconButton_"]
+               └ div[class*="_tabHostBody_"]
+
+   实测（打开态，576x782）：
+     - [data-dockkit-pane] 的底色来自宿主规则
+       `._tabHost_6nhg2_162:not(._float_6nhg2_156){background:var(--dsw-alias-bg-base)}`，
+       也就是说它其实「被接管」了（bg-base 已是我们的 #101624），
+       但 576 宽的整块实色贴在插画背景上，既不透明也没有边界 —— 看着像
+       另一套 UI 硬塞进来。这是整套皮肤里最割裂的表面。
+     - 祖先链（_tabCell_ / _tabLayout_ / _surface_ / panelBody / panel）全部透明，
+       所以只要把这一个节点调成半透明，背后的插画就会透上来。
+     - 标签条的激活态底色是 --dsw-alias-markdown-tag（#202b45），
+       标签图标那点 rgb(65,118,230) 是 pane 内容自己给的品牌色（svg path 的
+       currentColor / static-deepseek-500），属于内容，不在主题管辖内。
+
+   设计：把面板做成一块「浮在水面上的磨砂玻璃」——
+     半透明底 + 背景模糊 + 左侧一条 0.5px 水色分隔线 + 左侧圆角。
+   圆角只在非浮动（dock 贴边）时给：浮动面板本来就该是完整的圆角卡片。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   K1. 面板本体
+   ----------------------------------------------------------------------------
+   底色用 --fh-surface-base 混透明，亮/暗自动跟随；alpha 取 0.86 —— 再低
+   终端的等宽文字在插画上会开始发飘，再高就看不见插画了。
+   backdrop-filter 让透过来的插画变成模糊的水色，而不是一幅能被认出来的画。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] {
+  background: color-mix(in srgb, var(--fh-surface-base, var(--dsw-alias-bg-base)) 86%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: inset 0.5px 0 0 0 var(--dsw-alias-border-l2);
+}
+
+/* 贴边 dock：左侧圆角，让它从右边缘「长出来」而不是切一刀 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane]:not([class*="_float_"]) {
+  border-start-start-radius: var(--dsw-radius-lg, 16px);
+  border-end-start-radius: var(--dsw-radius-lg, 16px);
+}
+
+/* 关插画 / 纯色底时不需要毛玻璃：模糊没有内容可模糊，白烧 GPU */
+html[data-dsh-furina][data-dsh-furina-layout="on"]:not([data-dsh-furina-bg="art"]) [data-dockkit-pane] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--fh-surface-base, var(--dsw-alias-bg-base));
+}
+
+/* ----------------------------------------------------------------------------
+   K2. 标签条与正文的分界
+   ----------------------------------------------------------------------------
+   宿主标签条是 38px 高、完全透明的，和下面 744px 的面板内容糊成一片。
+   用 inset box-shadow 而不是 border-bottom：不改变盒子高度，不会让
+   标签条里的绝对定位控件跳 0.5px。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tabHostHeader_"] {
+  box-shadow: inset 0 -0.5px 0 0 var(--dsw-alias-border-l1);
+}
+
+/* ----------------------------------------------------------------------------
+   K3. 标签：激活的给一层水色，没激活的 hover 给更淡的一层
+   ----------------------------------------------------------------------------
+   宿主激活态用的是 markdown-tag（一块中灰蓝），和输入卡的选中态不是同一个
+   语汇。这里统一成品牌水色；文字色沿用宿主的 label-primary。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"] {
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    box-shadow var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tabActive_"] {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary, #7f96d2) 18%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--dsw-alias-brand-primary, #7f96d2) 26%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"]:not([class*="_tabActive_"]):hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 关闭叉：默认几乎和标题同亮度，hover 才浮现 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tabClose_"] {
+  border-radius: var(--dsw-radius-xs, 4px);
+  opacity: 0.55;
+  transition:
+    opacity var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"]:hover [class*="_tabClose_"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tabClose_"]:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 10%, transparent);
+}
+
+/* ----------------------------------------------------------------------------
+   K4. 标签条右侧的「+ 新建」与工具图标：只补 hover，形状交给宿主
+   ----------------------------------------------------------------------------
+   宿主已经给了 8px 圆角和 ghost 的文字色，缺的只是「这里可以点」的反馈。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_addTab_"],
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_iconButton_"] {
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_addTab_"]:hover,
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_iconButton_"]:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* ----------------------------------------------------------------------------
+   K5. 减弱动效 / 不支持 backdrop-filter
+   ----------------------------------------------------------------------------
+   系统开了「减弱动效」或用户在本插件里选了 reduced 时，毛玻璃换成实色：
+   持续存在的滤镜在低端 GPU 上本身就是一种负担，而它不是动效需求。
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--fh-surface-base, var(--dsw-alias-bg-base));
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-motion="reduced"] [data-dockkit-pane] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--fh-surface-base, var(--dsw-alias-bg-base));
+}

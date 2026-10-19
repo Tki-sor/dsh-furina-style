@@ -32,6 +32,42 @@
 > 与浓度都可调；精修层补到 P9（代码块 banner、对话里的「重试 / 中断」行）。
 > **0.6.0 起**：连续多张图片默认**横排并列 + 底部横向滚动条**，
 > 你发的和 AI 发的可以分别选「并列 / 堆叠」。
+> **0.7.0 起**：右侧边栏（终端 / 文件 / 浏览器那一栏）不再是整块实色，
+> 改成浮在水面上的磨砂玻璃；宿主一批「从未被主题接管」的中性灰按钮色
+> 统一收进蓝紫色阶。
+
+### 0.7.0 做了什么
+
+- **右侧边栏主题化**：宿主给 dock 面板的底色是 `--dsw-alias-bg-base`（我们
+  早就接管成 `#101624` 了），但 576 宽的整块**实色**贴在插画背景上，既没有
+  边界也不透光，看着像另一套 UI 硬塞进来 —— 这是整套皮肤里最割裂的表面。
+  现在它是 `--fh-surface-base` 的 86% + `backdrop-filter: blur(24px)`，
+  贴边那侧给 16px 圆角和一条 0.5px 内描边，标签条与正文之间补一条 0.5px
+  分隔线。关插画（渐变 / 纯色底）或减弱动效时自动退回实色 —— 那时没有东西
+  可模糊，免白烧 GPU。
+- **标签条统一语汇**：宿主激活标签用的是 `--dsw-alias-markdown-tag`（一块中
+  灰蓝），和输入卡的选中态不是同一个语汇。改成品牌水色 + 内描边；未激活的
+  hover 给 6% 水膜；关闭叉默认 55% 透明度、hover 才浮现。
+- **补上 22 个从未被接管过的宿主别名 token**（只覆盖有真实消费点的那些）：
+  - `button-elevated-fill`：暗色下是 `#43454a`（一块死灰），驱动侧栏顶部的
+    「新会话」按钮 —— 背景色普查里那个孤零零的 `rgb(67,69,74)` 就是它。
+    现在亮 `#fff` / 暗 `#24314f`。
+  - `button-primary-hover`：暗色下宿主给的是 `#ebeef2`，主按钮一 hover 直接
+    发白。改成 `#93a8e0`。
+  - 同批还包括 `button-floating-*`、`button-ghost-active-*`、
+    `button-info-*`、`button-tool-bar-*`、`menu-icon`、`menu-group-header-fill`、
+    `switch-thumb`、`label-dimmed`、`label-primary-bluish`、
+    `border-l2-darkmode-thin`、`code-diff-added/deleted`、`tooltip-key-bg`、
+    `label-shimmer`。
+  - **不覆盖**那些宿主 CSS 里 0 处消费的 token（`settings-card-stroke`、
+    `onboarding-*`、`file-diff-*` 等）—— 覆盖了也没人读，只是噪音。
+- **修正一条永远不命中的规则**：工具行的状态分支之前写的是
+  `[data-state="failed"]`，但宿主 `[data-tool]` 的 `data-state` 实测只有
+  `ok` / `error` / `running` 三种。`failed` 那条从未生效过。改成 `running`：
+  运行中的那一行给一层呼吸的水膜（减弱动效时不呼吸）。
+- **不做**：`dsh-easyrewrite` 的用户气泡是第三方插件自己写的内联样式，
+  按 0.3.0 定下的原则（主题只负责自己的表面，不替别的插件做内容策略），
+  这里不接管。
 
 ### 0.6.0 做了什么
 

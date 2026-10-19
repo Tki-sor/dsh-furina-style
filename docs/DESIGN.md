@@ -381,7 +381,125 @@ inline 流不改变文字语义。仍然保留「元素子级全是图」的守�
 
 ---
 
-## 10. 版本之间
+## 10. 0.7.0：把「宿主其实给了值，但值不对」的那一层补齐
+
+前几版处理的都是「宿主没有」或「宿主有但没做透」。这一版是第三种情况：
+**宿主给了 token，还给了值，但那个值在中性灰阶里** —— 换到任何一套有色相的
+皮肤里都会跳出来。
+
+### 10.1 判断一个别名 token 该不该覆盖
+
+宿主 CSS 里引用的 `--dsw-*` 有一百多个是 alias 层。补色前先做四步：
+
+1. 用 `getComputedStyle(document.body).getPropertyValue(...)` 把候选 token 的
+   **live 计算值**全拉一遍 —— 不要读源码，源码里的值要经过两层 `var()` 才落地。
+2. grep 宿主 CSS，数每个 token 的**真实消费点**：
+   `grep -c 'var(--dsw-alias-button-elevated-fill)' tests/extracted2/cssdump/*.css`
+3. **0 处消费的一律不覆盖** —— `settings-card-stroke`、`onboarding-*`、
+   `file-diff-*`、`markdown-code-segment-*` 都是「定义了但没人读」的僵尸
+   token，覆盖只会让 diff 变长。
+4. 剩下的按消费点的**可见面积**排优先级。这批里最大的是侧栏「新会话」按钮
+   （`_2H3hWW_newSession`，38px 高），它吃 `button-elevated-fill`。
+
+判别式：**如果一个 token 的宿主值落在中性灰阶（`--dsw-static-neutral-bluish-*`），
+而消费点是「用户会长时间看着的一块面积」，就该换。** 纯交互反馈（hover /
+active）另当别论，只需保证它在有色背景上不脏。
+
+### 10.2 一个坑：暗色下 `button-primary-hover` 是近白
+
+宿主的 alias 定义（`tests/extracted2/cssdump/alias_tokens_dark.css`）：
+
+```css
+--dsw-alias-button-primary-fill:  var(--dsw-alias-brand-primary);
+--dsw-alias-button-primary-hover: var(--dsw-static-neutral-bluish-100);  /* #ebeef2 */
+```
+
+主按钮按下时底色从品牌色跳到**近白** —— 在亮色主题里这是合理的「变浅」方向，
+但在暗色主题里它就是「按钮突然变成一块白斑」。覆盖成 `#93a8e0`（品牌色提亮版）。
+同类问题：
+- `button-info-fill` 亮 `#4176e6` / 暗 `#7aaaff`（DeepSeek 蓝），和我们的蓝紫
+  `#4a5fa8` / `#7f96d2` 并排就是两种蓝；
+- `switch-thumb` 暗 `#adb2b8`（中性灰），开关圆点应该是 `#dbe2f2`；
+- `label-shimmer`（「深度求索中」扫光的基色）暗 `color-mix(#fff 45%)`，
+  在蓝底上扫出来是一道白痕。
+
+还有一个**变量作用域**的坑：这批 token 最初写成 `var(--fh-brand)`，而
+`--fh-brand` 只在公共块定义了一次（亮色的 `#4a5fa8`），暗色块没有覆盖它 →
+暗色下 `button-primary-fill` 会解析成亮色值。改成在这些 token 里引用
+`var(--dsw-alias-brand-primary)`（它在自己的亮/暗两块都定义过）才正确。
+
+### 10.3 右侧边栏：不是「没接管」，是「接管了但看起来没接管」
+
+这里差点被误判，值得记一笔：
+
+```
+[data-dockkit-pane] 计算背景 = rgb(16, 22, 36)
+--dsw-alias-bg-base         = #101624      ← 一模一样
+```
+
+宿主规则 `._tabHost_6nhg2_162:not(._float_6nhg2_156){background:var(--dsw-alias-bg-base)}`
+**一直是被我们掌控的**。问题不在值，在「一块 576×782 的实色矩形贴在插画背景上」
+这个事实本身：主内容区的插画从右边被一刀切断，边界处没有任何过渡。
+
+所以修法不是改 token，而是改这个节点的**材质**：
+
+```css
+background: color-mix(in srgb, var(--fh-surface-base) 86%, transparent);
+backdrop-filter: blur(24px) saturate(140%);
+box-shadow: inset 0.5px 0 0 0 var(--dsw-alias-border-l2);
+```
+
+三条纪律：
+
+- **86% 是下限**。再低，终端里的等宽文字在插画上会开始发飘（对比度不够）；
+  再高，插画就白透了。这个数字是在隔离实例里逐档截图定的。
+- **`backdrop-filter` 必须有条件**：关掉插画（渐变 / 纯色底）时没有东西可模糊，
+  `blur` 只会白烧 GPU；减弱动效时同理。两条退路都要写。
+- **圆角只给贴边 dock**（`:not([class*="_float_"])`）。浮动面板本来该是完整
+  圆角卡片，再补左侧圆角会变成「缺一个角」。
+
+被否决的方案：把 `[data-dockkit-pane]` 换成 `--dsw-alias-bg-layer-1`（更亮的
+层次色）。否决理由是那样它就从「水面上的一块」变成「另一个面板」，和主内容区
+争层次 —— dock 是次级表面，不该比正文更亮。
+
+标签条同理：宿主激活标签用 `--dsw-alias-markdown-tag`（一块中灰蓝），和输入卡
+的选中态不是同一个语汇。改成 `color-mix(brand-primary 18%)` + 0.5px 内描边。
+
+### 10.4 修一条从未命中的规则
+
+`50-details.css` 的 D6 之前写：
+
+```css
+[data-tool][data-state="error"],
+[data-tool][data-state="failed"] { ... }
+```
+
+实测宿主 `[data-tool]` 的 `data-state` 取值分布：
+
+```
+ok 2701 | error 20 | running 1
+```
+
+**`failed` 从来不存在，`success` 也不存在**（成功态叫 `ok`）。那条分支写了三个
+版本、一次都没命中过 —— 因为它和 `error` 写在一起，「看起来没坏」所以没人发现。
+
+现在改成 `running`：运行中的工具行给一层 8% 品牌色的呼吸水膜
+（2.4s，`--fh-dur-breathe`），减弱动效时退化成静态 8%。这是宿主说不出来的一种
+状态 —— 它只有 `ok` / `error` 两种视觉。
+
+更一般的教训：**写状态选择器之前，先把 live 上的取值分布拉一遍**。
+`document.querySelectorAll('[data-tool]')` 再统计 `dataset.state` 的频次，
+比读组件源码快也准。
+
+### 10.5 不做的事：第三方气泡
+
+`dsh-easyrewrite` 的用户气泡是它自己写的内联 `bubbleStyle`
+（`rgba(255,255,255,0.08)`），按 0.3.0 定下的原则不接管 —— 主题只负责自己的
+表面，不替别的插件做内容策略。这条线在 0.3.0 已经用「删掉三个开关」付过学费。
+
+---
+
+## 11. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -391,3 +509,4 @@ inline 流不改变文字语义。仍然保留「元素子级全是图」的守�
 | 0.4.1 | 精修层、宿主自带导航条上色 + `Alt+↑/↓`、运行状态小胶囊、水膜滑块、窗口按钮去黑底 |
 | 0.5.0 | 图片大小可调（用户/AI 两路）、引用块四档色调 + 浓度、精修层补到 P9、隔离测试环境 |
 | 0.6.0 | 连续多图默认横排 + 横向滚动条；我发的 / AI 发的可分别选并列或堆叠 |
+| 0.7.0 | 右侧 dock 面板磨砂化、22 个别名 token 补色、`data-state="failed"` 死规则改为 `running` |

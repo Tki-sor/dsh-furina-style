@@ -177,6 +177,37 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body {
   --dsw-alias-scrollbar-hover-l1: #9aacd6;
   --dsw-alias-scrollbar-hover-l2: #8ea2d0;
 
+  /* 按钮族：宿主对这批别名只给了中性灰阶（暗色下 elevated-fill 是 #43454a、
+     primary-hover 甚至直接是近白 #ebeef2），与整套蓝紫完全不搭。
+     这里按同一套蓝墨 + 品牌色重新给值，让「新会话 / 发送 / hover」落在色系内。 */
+  --dsw-alias-button-elevated-fill: #ffffff;
+  --dsw-alias-button-floating-fill: #ffffff;
+  --dsw-alias-button-floating-hover: var(--fh-surface-2);
+  --dsw-alias-button-ghost-active-fill: #e4eaf7;
+  --dsw-alias-button-ghost-active-border: #2c3a7352;
+  --dsw-alias-button-ghost-active-hover: #eef2fa;
+  --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
+  --dsw-alias-button-primary-hover: var(--fh-brand-hover);
+  --dsw-alias-button-primary-dimmed: #4a5fa880;
+  --dsw-alias-button-info-fill: var(--dsw-alias-brand-primary);
+  --dsw-alias-button-info-hover: var(--fh-brand-hover);
+  --dsw-alias-button-tool-bar-fill: #2c3a730f;
+  --dsw-alias-button-tool-bar-hover: #2c3a731f;
+
+  /* 菜单与开关：图标别比文字更亮，分组标题给一层毛玻璃底 */
+  --dsw-alias-menu-icon: var(--dsw-alias-label-secondary);
+  --dsw-alias-menu-group-header-fill: #f4f7fdf0;
+  --dsw-alias-switch-thumb: #ffffff;
+
+  /* 其余零散别名 */
+  --dsw-alias-label-dimmed: #8a99bd;
+  --dsw-alias-label-primary-bluish: var(--fh-brand-deep);
+  --dsw-alias-border-l2-darkmode-thin: #2c3a731f;
+  --dsw-alias-code-diff-added: #3f9d5c1f;
+  --dsw-alias-code-diff-deleted: #cf4b4b1f;
+  --dsw-alias-tooltip-key-bg: color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%);
+  --dsw-alias-label-shimmer: color-mix(in srgb, #2c3a73 30%, transparent);
+
   /* 焦点环 */
   --dsw-focus-ring-color: var(--fh-brand);
   --dsw-focus-ring-width: 2px;
@@ -312,6 +343,36 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
   --dsw-alias-scrollbar-bg-l2: #3a4a70;
   --dsw-alias-scrollbar-hover-l1: #44547d;
   --dsw-alias-scrollbar-hover-l2: #4d6090;
+
+  /* 按钮族：暗色下宿主把它做成中性灰阶 —— elevated-fill #43454a 是一块死灰，
+     primary-hover #ebeef2 会让主按钮一 hover 就发白。这里全部换进蓝紫色阶。 */
+  --dsw-alias-button-elevated-fill: #24314f;
+  --dsw-alias-button-floating-fill: #1c2740;
+  --dsw-alias-button-floating-hover: #24314f;
+  --dsw-alias-button-ghost-active-fill: #263353;
+  --dsw-alias-button-ghost-active-border: #a0b4e642;
+  --dsw-alias-button-ghost-active-hover: #2c3a5e;
+  --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
+  --dsw-alias-button-primary-hover: #93a8e0;
+  --dsw-alias-button-primary-dimmed: #7f96d280;
+  --dsw-alias-button-info-fill: var(--dsw-alias-brand-primary);
+  --dsw-alias-button-info-hover: #93a8e0;
+  --dsw-alias-button-tool-bar-fill: #ffffff14;
+  --dsw-alias-button-tool-bar-hover: #ffffff24;
+
+  /* 菜单与开关 */
+  --dsw-alias-menu-icon: var(--dsw-alias-label-tertiary);
+  --dsw-alias-menu-group-header-fill: #1a2238f0;
+  --dsw-alias-switch-thumb: #dbe2f2;
+
+  /* 其余零散别名 */
+  --dsw-alias-label-dimmed: #56658a;
+  --dsw-alias-label-primary-bluish: #c3cfee;
+  --dsw-alias-border-l2-darkmode-thin: #a0b4e61f;
+  --dsw-alias-code-diff-added: #58b05824;
+  --dsw-alias-code-diff-deleted: #e05c5c24;
+  --dsw-alias-tooltip-key-bg: color-mix(in srgb, var(--dsw-alias-tooltip-bg), white 18%);
+  --dsw-alias-label-shimmer: color-mix(in srgb, #dbe2f2 45%, transparent);
 
   --dsw-focus-ring-color: #7f96d2;
   --dsw-focus-ring-width: 2px;
