@@ -145,3 +145,49 @@ html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-motion="reduc
   -webkit-backdrop-filter: none;
   background: var(--fh-surface-base, var(--dsw-alias-bg-base));
 }
+
+/* ----------------------------------------------------------------------------
+   K6. 标签条的三处错位（对齐 / 「+」过小 / 标题被切 + 假滚动条）
+   ----------------------------------------------------------------------------
+   三个病根，其实是一条链：
+
+   1. 假滚动条 + 错位（同一条规则引起）
+      L8 的全局 `* { scrollbar-width: thin }`（特异性 0,2,1）压过了宿主
+      `._stripTabs_6nhg2_257{... scrollbar-width:none}`（0,1,0）。它本来是
+      overflow-x:auto 的细条，被我们塞了一条 10px 高的横向滚动条进去。
+      实测（隔离实例，dock 569 宽）：
+        _stripTabs_ offsetH 38 = 28(内容) + 10(滚动条)，内容盒 y=5..33，
+        标签中心 y≈19；而 _stripChrome_ / _iconButton_ 直接在 _tabStrip_ 的
+        28px 内容盒里居中（y=10..38，中心 y=24）→ 右侧三个按钮比标签低 5px。
+      恢复 scrollbar-width:none 后实测：_stripTabs_ offsetH 38→28、
+      标签中心 19→24、与 chrome 中心 24 完全重合。**只这一条就同时修好了
+      「三按钮没和左边对齐」「+ 偏下」和那条假滚动条**，不需要任何对齐补丁。
+      注意只能收窄到 dock 面板内：别处（正文、侧栏、代码块）的细滚动条是
+      我们故意做的皮肤语言，全局规则不动。
+
+   2. 标题被截断
+      宿主 `._tab_6nhg2_134{min-width:80px;max-width:170px;flex:0 1 auto}`
+      把单个标签硬封在 170px，再叠 `_tabTitle_` 的 mask 渐隐（clipped 时
+      `black calc(100% - 16px)`），看起来就像「没展开 + 有滚动感」。
+      这里把上限换成 280px（约 22 个中文字），不动 min-width：宿主给 80px 的
+      下限是合理的，`flex:0 1 auto` 会负责在标签多时自然收缩。
+
+      **别写成百分比**：一开始写的是 `max-width:min(46%,280px)`，实测反而更窄
+      （标签 118.7px、标题只有 99px，比宿主的 170px 还短）。原因是标签的包含块
+      `_stripTabs_` 是 shrink-to-fit 的 flex item，百分比最大宽度按「它已经收缩后
+      的宽度」解析：214.5 × 46% ≈ 98.7px，正好卡住标题。百分比在这种循环依赖的
+      布局里没有意义，只能用绝对长度。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_stripTabs_"] {
+  scrollbar-width: none;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_stripTabs_"]::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-dockkit-pane] [class*="_tab_"] {
+  max-width: 280px;
+}

@@ -499,7 +499,82 @@ ok 2701 | error 20 | running 1
 
 ---
 
-## 11. 版本之间
+## 11. 0.7.1：一条全局规则在 28px 高的盒子里捅出的三个洞
+
+用户报的是三个问题：右上角三个图标按钮没和左边标签中心对齐、「+」偏下、
+「标题为什么不是完全展开的，怎么还有滚动条」。它们是同一个病根的三张脸。
+
+### 11.1 病根：`* { scrollbar-width: thin }` 压掉了宿主的 `none`
+
+0.4.x 起布局层有一条全局细滚动条规则：
+
+```css
+html[data-dsh-furina][data-dsh-furina-layout="on"] * {
+  scrollbar-width: thin;
+  scrollbar-color: ...;
+}
+```
+
+特异性 0,2,1。而宿主在 dockkit 里只给**一个**元素写了 `scrollbar-width:none`：
+
+```css
+._stripTabs_6nhg2_257 {
+  display:flex; flex:0 1 auto; align-items:center; min-width:0;
+  overflow-x:auto; overflow-y:hidden; scroll-behavior:smooth;
+  scrollbar-width:none;   /* ← 全文唯一一处 */
+  touch-action:none;
+}
+```
+
+0,1,0 < 0,2,1，所以它输了。`overflow-x:auto` 的标签条于是真的长出一条
+10px 高的横向滚动条 —— 这条条就是用户说的「怎么还有滚动条」。
+
+### 11.2 连锁反应：5px 的错位
+
+`_tabStrip_` 是 `height:28px; padding-top:10px; box-sizing:content-box`
+的 flex 容器（`align-items:center`）。它的子级分两类：
+
+- `_stripTabs_`（标签 + 「+」+ 分隔线）：被滚动条撑到 `offsetHeight:38`
+  （28 内容 + 10 滚动条），内容盒落在 y=5..33，**标签中心 y≈19**；
+- `_stripChrome_` / `_iconButton_`（右上角三个按钮）：高度就是 28，
+  直接在父级内容盒里居中，**中心 y=24**。
+
+差 5px（用户截图按 1.5 DPR 量到约 10 屏幕 px），看起来就是「没对齐」。
+「+」在 `_stripTabs_` 里面，所以跟着标签一起被顶高了 5px —— 它其实和标签
+是共线的，**用户感知到的「+ 偏下」是它相对右侧按钮偏下**。
+
+对照实验（隔离实例里注入临时样式）：`scrollbar-width:none` +
+`::-webkit-scrollbar{display:none}` 之后，`offsetHeight 38→28`、
+`tabCenter 19→24`、`chromeCenter 24` —— 完全重合。**一条规则修好三件事。**
+这个实验值得记住：先做「只改一条」的对照，再决定要不要补第二个补丁。
+
+### 11.3 为什么只收窄到 dock 面板内
+
+全局细滚动条是这套皮肤的语言（正文、侧栏、代码块、弹层都靠它统一），
+不能为了一个 28px 的标签条把它撤掉。所以 K6 的三条规则都带
+`[data-dockkit-pane]` 前缀 —— 宿主哪天改了 dockkit 的类名，这条规则最多失效，
+不会外溢到别处。
+
+顺带记一条：`_slotCaret_6nhg2_346` 的 `:before` 里写着
+`var(--dsw-alias-brand-primary-new-colorprimary-new-color)`，这是宿主自己的
+字符串拼接 bug（token 名被拼了两遍），实际解析失败、颜色无效。**不要照着它
+去补 token** —— 那是个永远不会被读到的名字。
+
+### 11.4 百分比 `max-width` 在这种布局里是死路
+
+标签宽度上限从宿主的 `170px` 放到 `280px` 之后，长文件名能完整展开了。
+但中间试过写成 `max-width: min(46%, 280px)`，**反而更窄**：标签 118.7px、
+标题只剩 99px。原因是标签的包含块 `_stripTabs_` 是 shrink-to-fit 的 flex
+item（`flex:0 1 auto`），它的宽度本身取决于内容宽度，于是百分比的解析基准
+是「它已经收缩之后的结果」：214.5 × 46% ≈ 98.7px，正好把标题卡死。
+
+**包含块宽度由内容反推（shrink-to-fit / fit-content / 表格列）时，百分比
+尺寸没有可用的基准，只能写绝对长度。** 这类循环依赖在 flex + 溢出组合里
+很常见，改之前先用 `getBoundingClientRect()` 量一眼实际宽度。
+
+---
+
+## 12. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -510,3 +585,4 @@ ok 2701 | error 20 | running 1
 | 0.5.0 | 图片大小可调（用户/AI 两路）、引用块四档色调 + 浓度、精修层补到 P9、隔离测试环境 |
 | 0.6.0 | 连续多图默认横排 + 横向滚动条；我发的 / AI 发的可分别选并列或堆叠 |
 | 0.7.0 | 右侧 dock 面板磨砂化、22 个别名 token 补色、`data-state="failed"` 死规则改为 `running` |
+| 0.7.1 | dock 标签条三处错位（全局细滚动条压掉宿主 `none`）、标签宽度上限 170→280px |
