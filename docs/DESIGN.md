@@ -329,7 +329,59 @@ Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 
 
 ---
 
-## 9. 版本之间
+## 9. 0.6.0：让连续多图横排，而不碰 React 的树
+
+### 9.1 三条渲染路径，三种改法
+
+连续多张图在本机上有三条完全不同的渲染路径，容器结构、谁负责、能不能改都不一样：
+
+| 来源 | 容器 | 谁渲染 | 改法 |
+| --- | --- | --- | --- |
+| 我发送的图片 | `[data-dsh-easyrewrite="user-images"]` | 本插件维护的 easyrewrite 补丁 | 内联 `flex-direction: column` → `row`（必须 `!important`） |
+| AI 结构化图片块 | `div[class*="_gallery"][data-align]` | 宿主 `ui-attachment` 的 `ImageGallery` | `flex-wrap: wrap` → `nowrap` + `overflow-x: auto`，缩略图 64×64 → 按比例 |
+| AI markdown 图 | `p` 里的多个 `button[class*="_imageButton_"]` | 宿主 markdown 渲染器 | 段落改 inline 流（`white-space: nowrap`）+ 横向滚动 |
+
+宿主其实已经把**连续的 image block 合并成一次 `renderSlot("conversation.chat.message.images")`**
+（`dsh-client-ui-chat` 的 `AssistantNodeView` 里有个 `while (next.kind === "image")` 的
+收集循环），所以结构化图片块本来就是「一个容器里的多个兄弟」，纯 CSS 就能排成一条。
+这条发现让 0.6.0 不需要新建任何 DOM。
+
+### 9.2 为什么 markdown 多图段落不能用 flex
+
+最自然的写法是给那个 `<p>` 加 `display: flex`。但它有副作用：**「一句话 + 多张图」
+也是同一个段落**，而纯文本节点不是元素、`:has()` 看不见它，所以
+`:not(:has(> :not(button)))` 这类守卫拦不住 —— 那段文字会被当成匿名 flex item，
+实测第一个图按钮被顶到 x=170（文字宽度）。
+
+改用 inline 流（`display: block` + `white-space: nowrap`）就没有这个问题：文字仍然
+是行内内容，自然留在行首；按钮之间的 `
+` 文本节点在 `nowrap` 下不再换行，于是所有
+图排成一行，`overflow-x: auto` 接管横向滚动。两种方案在纯图段落里视觉一致，但只有
+inline 流不改变文字语义。仍然保留「元素子级全是图」的守卫：段落里还有 `<a>` /
+`<strong>` 之类元素时整段不接管。
+
+另一个坑：宿主 `aU` 在没有 fileImages provider 时渲染的是**裸 `<img>`**（不包
+`button`），所以 `:has()` 判据要同时认 `p > button` 和 `p > img` 两种形态。
+
+### 9.3 缩略图尺寸为什么跟「AI 图片最大值」联动
+
+宿主 gallery 的 tile 写死 64×64（`object-fit: cover` 的方块缩略图），单独给一套
+「缩略图大小」滑块会多出一个需要解释的概念。并列模式下把 tile 高度取自 0.5.0 就有的
+`--fh-img-ai-h` 的 0.6 倍、宽度按图片比例，于是用户调「AI 发送的图片」时，
+**点开的大图上限和缩略带的高度是一起变的**，语义上是同一件事。
+
+### 9.4 不做的两件事
+
+- **不搬 DOM**：这些节点全部由 React 管理，`insertBefore` / `appendChild` 会触发
+  `HierarchyRequestError`，而且主题本来就不该改宿主的树。
+- **不合并空行分隔的多段**：`![](a)` 与 `![](b)` 之间有空行时是**两个 `<p>`**，
+  中间隔着段落边距。CSS 无法把两个兄弟段落变成一个滚动容器（除非用 `display:
+  contents` 之类会破坏语义的写法），所以这种情况保持原样 —— 而这也符合 markdown
+  作者的意图：空行本来就是在分段。
+
+---
+
+## 10. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -338,3 +390,4 @@ Windows 上右上角的最小化/最大化/关闭**不是 HTML**，是 Electron 
 | 0.3.0 | 细节层（代码/表格/工具行/占位）；删掉三个「替别的插件做内容策略」的开关 |
 | 0.4.1 | 精修层、宿主自带导航条上色 + `Alt+↑/↓`、运行状态小胶囊、水膜滑块、窗口按钮去黑底 |
 | 0.5.0 | 图片大小可调（用户/AI 两路）、引用块四档色调 + 浓度、精修层补到 P9、隔离测试环境 |
+| 0.6.0 | 连续多图默认横排 + 横向滚动条；我发的 / AI 发的可分别选并列或堆叠 |

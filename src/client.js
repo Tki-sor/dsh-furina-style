@@ -63,6 +63,10 @@ window.__ModuleLoader__.load({
     const ATTR_STATUS = 'data-dsh-furina-status';
     /** 引用块底色：water / pearl / neutral / none。 */
     const ATTR_QUOTE = 'data-dsh-furina-quote';
+    /** 我发送的图片排布：row（并列横排 + 横向滚动）/ stack（竖排堆叠）。 */
+    const ATTR_IMG_USER = 'data-dsh-furina-img-user';
+    /** AI 发送的图片排布：row / stack。 */
+    const ATTR_IMG_AI = 'data-dsh-furina-img-ai';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -75,6 +79,8 @@ window.__ModuleLoader__.load({
       ATTR_RAIL,
       ATTR_STATUS,
       ATTR_QUOTE,
+      ATTR_IMG_USER,
+      ATTR_IMG_AI,
       ATTR_HANDOFF,
     ];
 
@@ -128,11 +134,15 @@ window.__ModuleLoader__.load({
       imageAssistant: 360, // px —— AI 发送的图片最大高度（宿主默认也是 360）
       quoteTint: 'water', // water | pearl | neutral | none
       quoteAlpha: 0.32, // 0..0.8 —— 引用块底色浓度
+      imageLayoutUser: 'row', // row | stack —— 我发送的图片怎么排
+      imageLayoutAssistant: 'row', // row | stack —— AI 发送的图片怎么排
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
     const MOTION_MODES = ['system', 'on', 'reduced'];
     const QUOTE_TINTS = ['water', 'pearl', 'neutral', 'none'];
+    /** 图片排布：row = 并列横排 + 横向滚动；stack = 竖排堆叠。 */
+    const IMAGE_LAYOUTS = ['row', 'stack'];
 
     /** 图片高度的可调范围（px）。上限比下限宽，因为横图竖图差别大。 */
     const IMAGE_USER_RANGE = [100, 480];
@@ -187,6 +197,16 @@ window.__ModuleLoader__.load({
         ),
         quoteTint: pickEnum(input.quoteTint, QUOTE_TINTS, PREFS_DEFAULT.quoteTint),
         quoteAlpha: clampQuoteAlpha(input.quoteAlpha),
+        imageLayoutUser: pickEnum(
+          input.imageLayoutUser,
+          IMAGE_LAYOUTS,
+          PREFS_DEFAULT.imageLayoutUser
+        ),
+        imageLayoutAssistant: pickEnum(
+          input.imageLayoutAssistant,
+          IMAGE_LAYOUTS,
+          PREFS_DEFAULT.imageLayoutAssistant
+        ),
       };
     }
 
@@ -337,6 +357,8 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_RAIL, prefs.rail ? 'on' : 'off');
       setAttr(root, ATTR_STATUS, prefs.status ? 'on' : 'off');
       setAttr(root, ATTR_QUOTE, prefs.quoteTint);
+      setAttr(root, ATTR_IMG_USER, prefs.imageLayoutUser);
+      setAttr(root, ATTR_IMG_AI, prefs.imageLayoutAssistant);
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -799,8 +821,14 @@ window.__ModuleLoader__.load({
         phaseStall: '暂未响应',
         imageUserLabel: '我发送的图片',
         imageUserHint: '聊天记录里你自己发出去的图最大多高。觉得占地方就调小。',
+        imageUserLayoutLabel: '我发送的图片排布',
+        imageUserLayoutHint: '连发多张时怎么摆：并列就是横着排成一条，超出宽度可以横向滚动；堆叠就是老式的一张一行。',
         imageAssistantLabel: 'AI 发送的图片',
         imageAssistantHint: '助手回复里插入的图最大多高（宿主默认 360px）。',
+        imageAssistantLayoutLabel: 'AI 图片排布',
+        imageAssistantLayoutHint: '助手一次贴多张图时怎么摆。并列会排成一条带横向滚动。',
+        imageLayoutRow: '并列',
+        imageLayoutStack: '堆叠',
         quoteLabel: '引用块',
         quoteHint: '正文里「> 引用」那一段的底色。水色最贴合这套皮肤，嫌抢眼可以换更淡的或直接关掉。',
         quoteWater: '水色',
@@ -848,8 +876,14 @@ window.__ModuleLoader__.load({
         phaseStall: 'no response yet',
         imageUserLabel: 'Images I send',
         imageUserHint: 'Maximum height for images you sent. Lower it if they take too much room.',
+        imageUserLayoutLabel: 'My image layout',
+        imageUserLayoutHint: 'How several images in a row are arranged: side by side in one scrolling strip, or stacked one per line the old way.',
         imageAssistantLabel: 'Images from the assistant',
         imageAssistantHint: 'Maximum height for images in assistant replies (host default is 360px).',
+        imageAssistantLayoutLabel: 'Assistant image layout',
+        imageAssistantLayoutHint: 'How multiple images in one reply are arranged. Side by side puts them in a scrolling strip.',
+        imageLayoutRow: 'Side by side',
+        imageLayoutStack: 'Stacked',
         quoteLabel: 'Blockquote',
         quoteHint: 'Tint behind “>” quotes. Water matches the skin best; pick a softer one or turn it off.',
         quoteWater: 'Water',
@@ -1070,6 +1104,19 @@ window.__ModuleLoader__.load({
           ),
           h(
             Row,
+            { name: t('imageUserLayoutLabel'), hint: t('imageUserLayoutHint') },
+            h(Segmented, {
+              label: t('imageUserLayoutLabel'),
+              value: prefs.imageLayoutUser,
+              options: [
+                { value: 'row', label: t('imageLayoutRow') },
+                { value: 'stack', label: t('imageLayoutStack') },
+              ],
+              onChange: (value) => patch({ imageLayoutUser: value }),
+            })
+          ),
+          h(
+            Row,
             { name: t('imageAssistantLabel'), hint: t('imageAssistantHint') },
             h('input', {
               className: 'fh-set-range',
@@ -1082,6 +1129,19 @@ window.__ModuleLoader__.load({
               onChange: (event) => patch({ imageAssistant: Number(event.target.value) }),
             }),
             h('span', { className: 'fh-set-value' }, prefs.imageAssistant + 'px')
+          ),
+          h(
+            Row,
+            { name: t('imageAssistantLayoutLabel'), hint: t('imageAssistantLayoutHint') },
+            h(Segmented, {
+              label: t('imageAssistantLayoutLabel'),
+              value: prefs.imageLayoutAssistant,
+              options: [
+                { value: 'row', label: t('imageLayoutRow') },
+                { value: 'stack', label: t('imageLayoutStack') },
+              ],
+              onChange: (value) => patch({ imageLayoutAssistant: value }),
+            })
           ),
           h(
             Row,

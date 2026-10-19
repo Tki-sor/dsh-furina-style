@@ -1,6 +1,6 @@
 {
   "name": "dsh-furina-style",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Furina Style — 芙宁娜风格主题插件：芙宁娜水色与插画背景 + Claude 风格的布局与动效，配置在 DeepSeek 设置界面",
   "type": "module",
   "main": "index.js",

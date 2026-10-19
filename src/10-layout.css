@@ -348,3 +348,138 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat
   max-height: var(--fh-img-ai-h, 360px);
 }
 
+
+/* ============================================================================
+   L11. 图片排布：并列（横排 + 横向滚动） / 堆叠（一张一行）
+   ----------------------------------------------------------------------------
+   三条渲染路径，各有各的容器，但都只改「容器怎么摆」，不动任何 DOM 结构：
+
+   1. 我发送的图片 —— 由我们 vendored 的 dsh-easyrewrite 补丁渲染，
+      容器 [data-dsh-easyrewrite="user-images"] 自带内联样式
+      `display:flex; flex-direction:column; align-items:flex-end; gap:6px`，
+      所以改方向必须 !important（内联样式不带 important）。
+      图片是容器的直接子级，给张 flex:0 0 auto 就不会被压扁。
+
+   2. AI 的结构化图片块 —— 宿主 ui-attachment 的 ImageGallery：
+      div[class*="_gallery"][data-align="start|end"]，里面是
+      button[class*="_frame"][data-variant="tile"]（默认写死 64x64、object-fit:cover）。
+      并列模式把 tile 改成「高度 = 用户设置的最大高度、宽度按比例」，容器
+      从 flex-wrap:wrap 改成 nowrap + overflow-x:auto，缩略图就成了一条横向带。
+      单图是 data-variant="single"，不需要动（宿主已经按长边 240 排过）。
+
+   3. AI 的 markdown 图片 —— 连续写在同一段（无空行）的 ![](a) ![](b) 会成为
+      同一个 <p> 里的多个 button[class*="_imageButton_"]（按钮之间的换行是文本
+      节点，不是元素，flex 会完全忽略）；用 :has() 找「含两个以上图按钮的段落」
+      改成横向带。空行分隔的多段各自独立成 <p>，CSS 无法合并，保持原样。
+
+      两个实测踩过的坑：
+
+      a. 宿主 aU 在没有 fileImages provider 时渲染的是**裸 <img>**（不包 button），
+         所以判据要同时认 p > button 与 p > img 两种。
+
+      b. 这里**不能用 flex**，要用 inline 流（display:block + white-space:nowrap）。
+         原因是「一句文字 + 两张图」的混合段落同样满足「至少两个图」，而纯文本节点
+         在 :has() 眼里不存在 —— 加 :not(:has(> :not(button))) 也拦不住它。
+         实测（720px 容器，3 张 640x360）：flex 会把那段文字变成匿名 flex item，
+         第一个按钮被顶到 x=170；inline 流则让文字自然留在行首（x=162）、图跟在
+         后面，整行一起横向滚动。两者都不撕布局，但只有 inline 流不改变文字语义。
+          另外仍保留「元素子级里除了图没有别的元素」的守卫：段落里有 <a>/<strong>
+          之类元素时不接管。
+
+   为什么不用 JS 搬 DOM：这些节点全部由 React 管理，插入/移动会触发
+   HierarchyRequestError，也不该由主题去改宿主的树。
+   ========================================================================== */
+
+/* 1. 我发送的图片：并列 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-user="row"]
+  [data-dsh-easyrewrite="user-images"] {
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  gap: 8px !important;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--dsw-alias-scrollbar-bg-l2) 80%, transparent)
+    transparent;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-user="row"]
+  [data-dsh-easyrewrite="user-images"] img[data-dbe-msg-image] {
+  flex: 0 0 auto;
+}
+
+/* 2. AI 的结构化图片块：并列 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"] div[class*="_gallery"][data-align] {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--dsw-alias-scrollbar-bg-l2) 80%, transparent)
+    transparent;
+}
+
+/* tile 原本是 64x64 的方块缩略图；并列模式下给它「按高度等比」的尺寸 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"] div[class*="_gallery"][data-align] button[class*="_frame"][data-variant="tile"] {
+  display: block;
+  width: auto;
+  min-width: 0;
+  height: calc(var(--fh-img-ai-h, 360px) * 0.6);
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"] div[class*="_gallery"][data-align] button[class*="_frame"][data-variant="tile"] img {
+  width: auto;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
+/* 3. AI 的 markdown 图片：同一段里 ≥2 张 → 横向带
+   ------------------------------------------------------------------------
+   用 inline 流而不是 flex（见头部 b 条：flex 会改掉「文字+多图」段落里的文字排布）。
+   white-space:nowrap 让按钮之间的 "
+" 文本节点不再换行，于是图排成一行、
+   容器 overflow-x:auto 接管横向滚动。
+   `:not(:has(> :not(...)))` 是「元素子级全是图」这个条件：段落里若还有 <a>/<strong>
+   之类的元素就整段不管（纯文本拦不住，但 inline 流下它只是留在行首，不会错位）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"]
+  p:has(> button[class*="_imageButton_"] ~ button[class*="_imageButton_"]):not(
+    :has(> :not(button[class*="_imageButton_"]))
+  ),
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"]
+  p:has(> img ~ img):not(:has(> :not(img))) {
+  display: block;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 上下留白给焦点环：横向滚动容器会裁剪 outline（宿主 outline-offset:3px） */
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--dsw-alias-scrollbar-bg-l2) 80%, transparent)
+    transparent;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"]
+  p:has(> button[class*="_imageButton_"] ~ button[class*="_imageButton_"]):not(
+    :has(> :not(button[class*="_imageButton_"]))
+  )
+  > button[class*="_imageButton_"],
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-img-ai="row"]
+  [data-slot="conversation.chat.node"]
+  p:has(> img ~ img):not(:has(> :not(img)))
+  > img {
+  vertical-align: top;
+}
