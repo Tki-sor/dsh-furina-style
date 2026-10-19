@@ -67,6 +67,10 @@ window.__ModuleLoader__.load({
     const ATTR_IMG_USER = 'data-dsh-furina-img-user';
     /** AI 发送的图片排布：row / stack。 */
     const ATTR_IMG_AI = 'data-dsh-furina-img-ai';
+    /** 会话头操作按钮是否抬进 Windows 原生标题栏：on / off。 */
+    const ATTR_BAND = 'data-dsh-furina-band';
+    /** 输入卡样式：framed（输入区独立成卡）/ host（宿主原样一张大卡）。 */
+    const ATTR_COMPOSER = 'data-dsh-furina-composer';
     /** 让路标记：存在即表示布局段被别的主题接管。 */
     const ATTR_HANDOFF = 'data-dsh-furina-handoff';
 
@@ -81,6 +85,8 @@ window.__ModuleLoader__.load({
       ATTR_QUOTE,
       ATTR_IMG_USER,
       ATTR_IMG_AI,
+      ATTR_BAND,
+      ATTR_COMPOSER,
       ATTR_HANDOFF,
     ];
 
@@ -136,6 +142,8 @@ window.__ModuleLoader__.load({
       quoteAlpha: 0.32, // 0..0.8 —— 引用块底色浓度
       imageLayoutUser: 'row', // row | stack —— 我发送的图片怎么排
       imageLayoutAssistant: 'row', // row | stack —— AI 发送的图片怎么排
+      headerBand: true, // 会话头操作按钮抬进 Windows 原生标题栏
+      composerFramed: true, // 输入区独立成卡（输入框一张卡，工具行一排控件）
     });
 
     const BACKGROUND_MODES = ['art', 'gradient', 'none'];
@@ -207,6 +215,12 @@ window.__ModuleLoader__.load({
           IMAGE_LAYOUTS,
           PREFS_DEFAULT.imageLayoutAssistant
         ),
+        headerBand:
+          input.headerBand === undefined ? PREFS_DEFAULT.headerBand : Boolean(input.headerBand),
+        composerFramed:
+          input.composerFramed === undefined
+            ? PREFS_DEFAULT.composerFramed
+            : Boolean(input.composerFramed),
       };
     }
 
@@ -359,6 +373,8 @@ window.__ModuleLoader__.load({
       setAttr(root, ATTR_QUOTE, prefs.quoteTint);
       setAttr(root, ATTR_IMG_USER, prefs.imageLayoutUser);
       setAttr(root, ATTR_IMG_AI, prefs.imageLayoutAssistant);
+      setAttr(root, ATTR_BAND, prefs.headerBand ? 'on' : 'off');
+      setAttr(root, ATTR_COMPOSER, prefs.composerFramed ? 'framed' : 'host');
       if (handoff) {
         setAttr(root, ATTR_HANDOFF, 'claude-style');
       } else if (root.hasAttribute(ATTR_HANDOFF)) {
@@ -829,6 +845,10 @@ window.__ModuleLoader__.load({
         imageAssistantLayoutHint: '助手一次贴多张图时怎么摆。并列会排成一条带横向滚动。',
         imageLayoutRow: '并列',
         imageLayoutStack: '堆叠',
+        headerBandLabel: '标题栏放操作按钮',
+        headerBandHint: '把会话头右侧那两个按钮（打开文件夹 / 更多操作）抬进 Windows 窗口顶部那行标题栏，标题因此多出一点空间。窗口太窄时会自动退回原位。',
+        composerFramedLabel: '输入框独立成卡',
+        composerFramedHint: '输入框自己有边界和焦点光，附件、模型、发送那排控件浮在它下面。关掉就回到宿主原来的一整张大卡。',
         quoteLabel: '引用块',
         quoteHint: '正文里「> 引用」那一段的底色。水色最贴合这套皮肤，嫌抢眼可以换更淡的或直接关掉。',
         quoteWater: '水色',
@@ -884,6 +904,10 @@ window.__ModuleLoader__.load({
         imageAssistantLayoutHint: 'How multiple images in one reply are arranged. Side by side puts them in a scrolling strip.',
         imageLayoutRow: 'Side by side',
         imageLayoutStack: 'Stacked',
+        headerBandLabel: 'Header actions in the title bar',
+        headerBandHint: 'Lift the two header buttons (open folder / more actions) into the Windows caption row so the title gets more room. Falls back to its own row on narrow windows.',
+        composerFramedLabel: 'Framed composer',
+        composerFramedHint: 'The input gets its own frame and focus glow, with the attachment, model and send controls floating underneath. Turn off to restore the host\u2019s single large card.',
         quoteLabel: 'Blockquote',
         quoteHint: 'Tint behind “>” quotes. Water matches the skin best; pick a softer one or turn it off.',
         quoteWater: 'Water',
@@ -1085,6 +1109,24 @@ window.__ModuleLoader__.load({
               checked: prefs.status,
               label: t('statusDetailLabel'),
               onChange: (value) => patch({ status: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('headerBandLabel'), hint: t('headerBandHint') },
+            h(Switch, {
+              checked: prefs.headerBand,
+              label: t('headerBandLabel'),
+              onChange: (value) => patch({ headerBand: value }),
+            })
+          ),
+          h(
+            Row,
+            { name: t('composerFramedLabel'), hint: t('composerFramedHint') },
+            h(Switch, {
+              checked: prefs.composerFramed,
+              label: t('composerFramedLabel'),
+              onChange: (value) => patch({ composerFramed: value }),
             })
           ),
           h(

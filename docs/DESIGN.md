@@ -655,7 +655,125 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 
 ---
 
-## 13. 版本之间
+## 13. 0.8.0：不搬 DOM 也能让按钮住进窗口标题栏
+
+两件事，一件是「把宿主已经画好的东西挪到它该在的地方」，另一件是
+「宿主把两层画成了一层，把它拆开」。两条都只用了 CSS 与 `env()`。
+
+### 13.1 为什么标题栏那条规则可以没有 JS
+
+claude-style 的 headerBand 是一整段 JS：量窗口控件宽、量标题宽、量标签条的
+居中点，算出一个「放得下吗」的布尔值，再逐项 `style.setProperty` 写六个变量，
+窗口 resize 时重算一遍，还要处理「只抬标题不抬按钮」「两边都放不下就都不抬」
+这些分支。
+
+在我们这里，等价信息有一半是 CSS 直接给的：Electron 在 Windows 上启用
+`window-controls-overlay` 之后，
+
+- CSS 环境查询：`env(titlebar-area-width)` = 1143px、`env(titlebar-area-height)`
+  = 40px（本机 1280 宽窗口）；
+- JS 侧：`navigator.windowControlsOverlay.getTitlebarAreaRect()` → 同一组数。
+
+`100vw − titlebar-area-width` 就是右侧三个窗口按钮的宽度（137px）。于是
+「贴着窗口按钮左边 8px、在 caption row 里垂直居中」可以写成：
+
+```css
+top: calc(env(titlebar-area-height, 40px) / 2);
+right: calc(100vw - env(titlebar-area-width, calc(100vw - 140px)) + 8px);
+transform: translateY(-50%);
+```
+
+两个 `env()` 都带兜底值：`titlebar-area-height` 缺省 40px（就是宿主
+`--dsh-windows-titlebar-height` 的值）、`titlebar-area-width` 缺省按
+「窗口宽 − 140px」算（claude 用的也是 140px 这个兜底常量）。所以即使
+`window-controls-overlay` 不可用，按钮也只是「距右 148px」，不会跑到窗口外。
+
+**放弃的 JS 版本**：本来可以学 claude 量一次写变量，但那样就得挂 resize 监听、
+在设置面板里接开关、还要处理「插件卸载时把六个变量删干净」。纯 CSS 版本
+只有一个开关属性 `data-dsh-furina-band="on|off"`，卸载即消失。
+
+### 13.2 真正的坑：`backdrop-filter` 会给 `fixed` 后代建 containing block
+
+第一次实测，按钮确实变成 `position: fixed` 了，但落在 y=46 而不是 y=6 ——
+正好是「header 顶部 40px + 20px 的一半」。原因是 0.4.1 给会话头加的毛玻璃：
+
+```css
+header:has([data-conversation-tabs]) { backdrop-filter: blur(10px) saturate(125%) }
+```
+
+**`backdrop-filter` 和 `transform` / `filter` 一样，会把元素变成其
+`position: fixed` 后代的 containing block。** 于是 `top: 20px` 变成
+「相对 header 顶部的 20px」。
+
+修法不是删掉毛玻璃，而是把它从 header 本体挪到伪元素：
+
+```css
+header:has([data-conversation-tabs]) { backdrop-filter: none; position: relative; z-index: 0 }
+header:has([data-conversation-tabs])::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  backdrop-filter: blur(10px) saturate(125%);
+}
+```
+
+视觉上没有差别（伪元素铺满 header、内容画在它上面），但 header 本体不再是
+containing block，fixed 恢复相对视口定位。这是本版最值得记住的一条：
+**做「把宿主元素抬到窗口层」这类效果之前，先查祖先链上有没有
+`backdrop-filter` / `transform` / `filter` / `contain`。**
+
+顺带确认了两件「看起来会挡路、其实不挡」的事：
+
+- 祖先链上的 `overflow: hidden`（对话根、centerCol、frame 三层都有）
+  **裁不到 `position: fixed`** —— fixed 的 containing block 是视口，
+  不是最近的可滚动祖先（那是 `position: absolute` 的规则）。
+- 页面里没有任何 `-webkit-app-region` 冲突：宿主的拖拽声明只在
+  `html[data-platform=darwin]` 下写，Windows 上全页 `app-region: none`。
+  保险起见规则里仍写了 `no-drag`。
+
+### 13.3 输入框：宿主把两层画成了一层
+
+宿主的结构是「卡片 + 内容」，但**只给卡片画了造型**：
+
+```css
+.RlGAzG_card   { background: var(--dsw-specific-input-major); border-radius: 22px;
+                 box-shadow: var(--dsw-elevation-soft); padding-top: 8px; gap: 12px }
+.RlGAzG_scroll { max-height: …; margin-right: 4px; overflow-y: auto }  /* 无底、无边、无内边距 */
+```
+
+所以输入文字、工具行、发送键全都陷在同一块底里，视觉上分不出「你在打字的
+那一层」和「操作那一层」。
+
+claude-style 的解法是**把造型从卡片下移到输入区**：卡片拉平成透明容器，
+`[data-input-scroll]` 自己拿一张 14px 小卡（底 + 0.5px 边 + 阴影），工具行
+浮在卡下面的画布上。0.8.0 照这个结构重写，但颜色全用水色令牌：
+
+- 卡片的 `--dsw-elevation-soft`（一圈 `0 0 0 1px` 的描边阴影）在 `framed`
+  模式下让位给输入区自己的 `0.5px` 实边 —— 一层阴影 + 一层描边重叠会脏；
+- `:focus-within` 不换底色，只把边线提到 46% 水色 + 3px 的 12% 光晕，
+  与 0.7.x 的焦点环语言一致；
+- 亮色下阴影换成 `rgb(44 58 115 / .08)`（蓝墨，不是纯黑）加一道内高光，
+  暗色保持 `rgb(0 0 0 / .18)`。
+
+两个安全前提是实测出来的：卡片里那 9 个 `[data-slot]`
+（`overlay` / `attachments` / `permission` / `plan` / `left` / `right` /
+`model` / `model.label` / `activity`）**全部是 `display: contents` 的空壳**，
+rect 恒为 0×0，所以给卡面改 background/gap 不会让任何插槽错位；卡片的最后
+一个子级恒为工具行 `div.RlGAzG_row`，`> :last-child` 选择器因此稳定。
+
+### 13.4 两个开关的位置
+
+两条都是「宿主本来也能用，只是不够好」的改进，所以默认开、可关：
+
+| prefs 键 | 默认 | html 属性 | 关掉后 |
+| --- | --- | --- | --- |
+| `headerBand` | `true` | `data-dsh-furina-band="off"` | 按钮回标题行右端（0.7.x 原样） |
+| `composerFramed` | `true` | `data-dsh-furina-composer="host"` | 输入框回宿主一整块大卡 |
+
+关掉走的是「属性不匹配 → 整条规则不生效」，不是 `display: none` 或重置样式，
+所以不存在「关掉之后还残留一半」的状态。
+
+---
+
+## 14. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -668,3 +786,4 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 | 0.7.0 | 右侧 dock 面板磨砂化、22 个别名 token 补色、`data-state="failed"` 死规则改为 `running` |
 | 0.7.1 | dock 标签条三处错位（全局细滚动条压掉宿主 `none`）、标签宽度上限 170→280px |
 | 0.7.2 | dock 标签标题不再被 hover/active 态 mask 白吃一截：装得下就完整显示 |
+| 0.8.0 | 会话头按钮抬进原生标题栏（纯 CSS + `env()`）、输入区独立成卡；两个开关 |

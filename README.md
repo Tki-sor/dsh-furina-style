@@ -39,6 +39,77 @@
 > 共线、「+」不再偏下、那条假的横向滚动条消失，长标题也能展开到 280px。
 > **0.7.2 起**：标签标题不再被渐隐 mask 白吃一截 —— 只有真的装不下才渐隐，
 > 装得下就完整显示，关闭叉与文字之间留出干净的 2px。
+> **0.8.0 起**：会话头那两个按钮（「用文件资源管理器打开」+「更多操作」）
+> 搬进 Windows 原生标题栏，和窗口三键同一行；输入框从「一整块大卡」改成
+> 宿主式的**输入区独立成卡 + 工具行浮在卡下**，两件事都能在设置里关掉。
+
+### 0.8.0 做了什么
+
+两件事都来自一句话：「布局可以参考 claude 的，例如这两个按钮的位置；聊天框
+部分也是可以参考」。
+
+#### 一、会话头的两个按钮抬进原生标题栏
+
+- **目标**：claude-style 的 headerBand —— 会话标题行的「用文件资源管理器打开」
+  分体按钮和「更多操作」不再挤在标题行的右端（那里紧挨着右侧 dock 面板，
+  视觉上像被夹住），而是升到窗口自己的 caption row 里，和最小化 / 最大化 /
+  关闭三键齐平。
+- **不需要一行 JS**：Electron 的 `window-controls-overlay` 在 Windows 上把两样
+  东西喂给了渲染进程 —— CSS 环境的 `env(titlebar-area-width)` /
+  `env(titlebar-area-height)`（本机实测 `1143px` / `40px`），以及 JS 的
+  `navigator.windowControlsOverlay.getTitlebarAreaRect()`。区别是 CSS 那个
+  **在插件加载的那一刻就是可用值**，所以整件事可以写成纯 CSS：
+
+  ```css
+  div:has(> [data-slot="conversation.session.header.utilities"]) {
+    position: fixed;
+    top: calc(env(titlebar-area-height, 40px) / 2);
+    right: calc(100vw - env(titlebar-area-width, calc(100vw - 140px)) + 8px);
+    transform: translateY(-50%);
+  }
+  ```
+
+  `100vw - titlebar-area-width` 就是右侧三个窗口按钮占的宽度（本机 137px），
+  `+ 8px` 是留给自己和它们的间距；两个 `env()` 都带兜底值，所以
+  `window-controls-overlay` 不可用时退回「距右 148px」，不会跑到窗口外。
+
+- **前置条件是拆掉 header 的 `backdrop-filter`**。0.4.1 起我们给会话头上了一层
+  `blur(10px) saturate(125%)` 的毛玻璃，而 **`backdrop-filter` 会给它的
+  `position: fixed` 后代创建 containing block** —— 按钮一进 header 就只相对
+  header 定位，`top: 20px` 落在 y=46 而不是 y=6。修法是把同一层毛玻璃挪到
+  `header::before`（`inset: 0; z-index: -1; pointer-events: none`），header 本体
+  只留 `position: relative; z-index: 0`。视觉完全一致，fixed 又恢复自由。
+- 祖先链上的三个 `overflow: hidden`（对话根 / centerCol / frame）**不影响
+  `position: fixed`** —— fixed 只被 transform / filter / backdrop-filter /
+  contain 约束，`overflow` 裁不到它。这一点已经实测，不用为了它去动宿主的
+  布局类。
+- 窄窗保护：宽度 ≤ 640px 时整条规则退化回 `position: static`，
+  按钮回到标题行里（`src/16-band.css` 的 B3）。设置里关掉这个开关，
+  `<html>` 上的 `data-dsh-furina-band` 变成 `off`，规则整体不生效。
+
+#### 二、输入框改成「输入区独立成卡」
+
+- 宿主原设计是**一整块大卡**：`[data-composer-card]` 有背景、22px 圆角、阴影，
+  输入区（`[data-input-scroll]`）自己在里面**完全没有造型**（无背景、无边框、
+  无内边距），所以视觉上文字、工具行、发送键都陷在同一块底里。
+- claude-style 的做法正好相反：把大卡的底和边框全部拉平，只给输入区自己一张
+  14px 小卡，工具行浮在卡下面的画布上。照这个思路：
+  - `[data-composer-card]` → `background: transparent; border: 0; box-shadow: none;
+    padding: 0; gap: 8px`；
+  - `[data-input-scroll]` → 半透明的 `--dsw-specific-input-major` 底 +
+    0.5px 发丝边 + `border-radius: 14px` + `padding: 2px` + 一层薄投影；
+  - `:focus-within` 时边线换成 46% 的水色 + 一圈 3px 的 12% 光晕
+    （宿主自己那圈 `--dsw-elevation-soft` 在 `framed` 模式下让位）；
+  - 工具行 `[data-composer-card] > :last-child` 收紧到 `padding: 0 4px`、
+    `gap: 10px`、`min-height: 30px`。
+- 两个前提都是实测过的：`[data-input-scroll]` 确实是输入的**直接外层**
+  （`[data-composer-input]` 是 lexical contenteditable，在它里面），
+  卡片里那 9 个 `[data-slot]` 全是 `display: contents` 的空壳，
+  不会因为给卡面改样式而错位；card 的最后一个子级恒为工具行。
+- 暗色 / 亮色的阴影分开写（暗色用 `rgb(0 0 0 / .18)`，亮色换成
+  `rgb(44 58 115 / .08)` 加一道内高光），reduced-motion 下过渡关掉。
+- 设置里关掉 → `data-dsh-furina-composer="host"`，整套规则不生效，
+  输入框回到宿主原样。
 
 ### 0.7.2 做了什么
 
@@ -290,6 +361,8 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
 | 布局微调 | 开 / 关 | 输入卡圆角与投影、对话列宽、会话头分隔线、精修层 |
 | 对话导航 | 开 / 关 | 右侧短横线（宿主 TurnNavigator）的上色与 `Alt+↑/↓` 跳轮 |
 | 运行状态细节 | 开 / 关 | 运行行末尾那枚「调用工具 / 正在写回答 / 暂未响应」小胶囊 |
+| 标题栏放操作按钮 | 开 / 关 | 把「用文件资源管理器打开」+「更多操作」抬进 Windows 原生标题栏。默认开 |
+| 输入框独立成卡 | 开 / 关 | 输入区自己一张 14px 小卡、工具行浮在卡下；关掉回宿主一整块大卡。默认开 |
 | 我发送的图片 | 100 – 480 px | 你自己发出去的图最大多高。默认 240 |
 | AI 发送的图片 | 120 – 600 px | 助手回复里插入的图最大多高。默认 360（= 宿主原值） |
 | 我发送的图片排布 | 并列 / 堆叠 | 连续多张图怎么摆。默认**并列**（横排 + 横向滚动条） |
@@ -321,7 +394,9 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
   "quoteTint": "water",
   "quoteAlpha": 0.32,
   "imageLayoutUser": "row",
-  "imageLayoutAssistant": "row"
+  "imageLayoutAssistant": "row",
+  "headerBand": true,
+  "composerFramed": true
 }
 ```
 
@@ -329,7 +404,8 @@ export DSH_HOME='C:\Users\11515\.dsh-test'
 读入时丢弃，缺的键补默认值。0.4.1 之前存的配置没有 `veil` / `rail` / `status`，
 0.4.1 之后、0.5 之前存的配置没有 `imageUser` / `imageAssistant` / `quoteTint` /
 `quoteAlpha`，0.5 之后、0.6 之前存的配置没有 `imageLayoutUser` /
-`imageLayoutAssistant`，读入时都会自动补上。
+`imageLayoutAssistant`，0.7 系列存的配置没有 `headerBand` / `composerFramed`，
+读入时都会自动补上。
 
 0.1.0 只存过 `dsh-furina:motion`，升级时会自动迁移一次，然后删掉旧键。
 读不到 localStorage（隐私模式、禁用存储）时全部回落到内置默认值，不报错。
@@ -446,6 +522,8 @@ dsh-furina-style/
 │   ├── 00-tokens.css     # 设计令牌 + 三种表面模式的配色
 │   ├── 10-layout.css     # 布局（L1–L11，含图片显示大小与并列排布）
 │   ├── 15-polish.css     # 精修层（P1–P9，宿主已画但对的地方补质感）
+│   ├── 16-band.css       # 会话头操作按钮抬进原生标题栏（B1–B3）
+│   ├── 17-composer.css   # 输入区独立成卡（C1–C5）
 │   ├── 20-motion.css     # 动效（M1–M11）
 │   ├── 30-surface.css    # 背景插画层 + 让容器背景透明 + 正文水膜
 │   ├── 40-settings.css   # 设置面板样式（.fh-set-*）
@@ -483,6 +561,11 @@ dsh-furina-style/
 | DSH | `>= 0.1.7` |
 | 浏览器 | Chromium 105+（用到 `:has()`、`color-mix()`） |
 | 平台 | Windows / macOS（`[data-platform=darwin]` 分支由宿主处理） |
+
+`env(titlebar-area-*)` 只在 Electron 的 `window-controls-overlay` 生效时给出真值；
+拿不到时标题栏那条规则用兜底值（距右 148px）定位，行为仍是「固定的右上角」，
+只是不会精确贴着窗口三键。浏览器里打开（非 Electron）时这条规则无意义，
+可以关掉设置里的「标题栏放操作按钮」。
 
 不支持 `:has()` / `color-mix()` 时样式会优雅降级：颜色变量仍然生效，
 用到这两个特性的布局/装饰规则整条失效，不会破坏宿主原有布局。

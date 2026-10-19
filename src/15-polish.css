@@ -22,9 +22,28 @@
    -------------------------------------------------------------------------- */
 
 /* 毛玻璃只在插画模式生效：渐变/纯色模式下画布本身干净，再叠一层模糊只会
-   让标题发毛（审计 #60）。 */
+   让标题发毛（审计 #60）。
+
+   0.8.0 起模糊挂在 ::before 上、header 自己不再带 backdrop-filter。原因不是
+   审美而是布局：backdrop-filter 会给 position:fixed 的后代创建 containing
+   block（和 filter 同语义），而「把右侧操作按钮抬进 Windows 标题栏」需要
+   fixed 相对视口定位。实测带 backdrop-filter 时按钮只能到 y=46，挪到
+   ::before 后同一组规则立刻落到 y=6（标题栏中线）。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-bg="art"]
   header:has([data-conversation-tabs]) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  position: relative;
+  z-index: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-bg="art"]
+  header:has([data-conversation-tabs])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   backdrop-filter: blur(10px) saturate(125%);
   -webkit-backdrop-filter: blur(10px) saturate(125%);
 }

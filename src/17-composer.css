@@ -1,0 +1,160 @@
+/* ============================================================================
+   dsh-furina-style — 17. 输入卡（C1–C5）
+   ----------------------------------------------------------------------------
+   宿主把输入区画成「一整张大卡」：`[data-composer-card]` 自己带底色、圆角、
+   阴影，输入行和下面的工具行都长在这张卡里。问题有两个：
+
+     1. 输入区没有自己的边界。`[data-input-scroll]` 的计算样式是
+        `background: rgba(0,0,0,0); padding: 0; border: 0; radius: 0` ——
+        宿主只把它当滚动容器，从不画它。光标落在卡里的哪一块是「可输入的」
+        完全靠猜。
+     2. 工具行（附件 / 模式 / 模型 / 发送）和输入区同处一张卡，卡片高度
+        98px，工具行底边几乎贴着卡的圆角，显得闷。
+
+   claude-style 的做法是把外层卡拉平、只让输入区成为可见的卡面，工具行
+   作为一排「浮在下面的控件」。这样层级清楚：**你在一个框里打字，下面那排
+   是作用于这个框的控件**。这里照这个结构做，配色仍用芙宁娜的水色。
+
+   为什么外层卡必须 `!important`：宿主 `.RlGAzG_card` 是单类选择器（0,1,0），
+   我们的 `html[data-dsh-furina][…] [data-composer-card]` 已经到 (0,4,1)，
+   本来就能压过；加 `!important` 是为了压住宿主的行内样式和将来可能出现的
+   更高特异性规则（editor 模式的 `data-composer-variant` 之类）。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   C1 外层卡退成透明底板
+   ----------------------------------------------------------------------------
+   gap 从 12px 收紧到 8px：输入框和工具行之间只留一个「呼吸」的距离，不要
+   像两个独立区块。padding-top 归零 —— 原先那 8px 是给大卡的圆角让位的，
+   现在圆角在输入框上，外层不该再撑。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  gap: 8px !important;
+}
+
+/* 宿主在 focus-within 时给大卡加 elevation 描边 —— 卡没了，这个焦点态要跟着
+   挪到输入框上去（见 C3），这里先把它关掉。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]:focus-within {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C2 输入区成为可见卡面
+   ----------------------------------------------------------------------------
+   14px 圆角（比大卡原来的 18px 小一档，因为它现在是内层元素）、0.5px 发丝边
+   （宿主的 `border-l2` 是「细线」语义，配 0.5px 不会糊）、底部 1px 的柔和
+   落影给出一点「纸张压在桌面上」的体积感。
+
+   `margin-right: 0`：宿主给滚动容器写了 4px 右外边距（给滚动条让位），在
+   独立卡面下会让卡片右侧比工具行短一截，视觉上是歪的；我们的全局滚动条规则
+   已经把滚动条做成覆盖式（overlay），不需要再让位。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-input-scroll] {
+  background: color-mix(
+    in srgb,
+    var(--dsw-specific-input-major) 96%,
+    transparent
+  ) !important;
+  border: 0.5px solid
+    color-mix(in srgb, var(--dsw-alias-border-l2) 85%, transparent) !important;
+  border-radius: 14px !important;
+  padding: 2px !important;
+  margin-right: 0 !important;
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.04) !important;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease !important;
+}
+
+/* 亮色下黑色落影会显脏，换成低 alpha 的墨蓝。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body:not([data-ds-dark-theme])
+  [data-input-scroll] {
+  box-shadow:
+    0 1px 3px rgb(44 58 115 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.6) !important;
+}
+
+/* 输入框内边距：宿主是 `4px 8px 0 14px`（顶 4 右 8 底 0 左 14），在独立卡面
+   里左右不对称会显得字贴边。改成四边都有呼吸，左 12 右 10 保留宿主「左边比
+   右边宽一点」的意图（光标起点不要怼着边线）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-input-scroll]
+  [data-composer-input] {
+  padding: 6px 10px 6px 12px !important;
+}
+
+/* 占位文案是绝对定位的，不会跟着输入框内边距走，必须显式对齐（否则会偏左
+   2px、偏上 2px，和真文字错开一格）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-placeholder] {
+  inset: 6px 10px auto 12px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C3 焦点态挪到输入框上
+   ----------------------------------------------------------------------------
+   只用 `:focus-within` 而不是 `:focus`：焦点可能落在输入框本身，也可能落在
+   输入框里被 focus 的行内元素上。0.5px 的边线在焦点态加粗到 1px 会引发布局
+   抖动，所以改「换色 + 一圈 3px 的柔光」，宽度不变。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]:focus-within
+  [data-input-scroll] {
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 46%,
+    transparent
+  ) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent),
+    0 1px 3px rgb(0 0 0 / 0.18) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C4 工具行收紧
+   ----------------------------------------------------------------------------
+   宿主 `.RlGAzG_row` 是 `padding: 2px 8px 6px`（顶 2 右 8 底 6、42px 高）。
+   卡面已经独立，工具行再留 6px 底边就离窗口底太远；压成 `0 4px` + 内容
+   32px 高，整卡从 98px 收到 83px。
+
+   注意：这一条只改工具行自己的盒，不动里面任何按钮的尺寸（那些在
+   15-polish.css 的 P4 里已经统一过圆角与悬停）。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  > :last-child {
+  padding: 0 4px !important;
+  gap: 10px !important;
+  min-height: 30px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C5 减弱动效时不走过渡
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-input-scroll] {
+    transition: none !important;
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"][data-dsh-furina-motion="reduced"]
+  [data-input-scroll] {
+  transition: none !important;
+}

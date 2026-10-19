@@ -1,0 +1,93 @@
+/* ============================================================================
+   dsh-furina-style — 16. 标题栏（B1–B3）
+   ----------------------------------------------------------------------------
+   会话头右侧那两个按钮（「用文件资源管理器打开」分体按钮 + 「更多操作」）
+   本来挤在标题行最右端，紧贴右侧边栏。Windows 的原生标题栏那 40px 里除了
+   三个窗口键以外全是空的，所以把这两个按钮抬上去，标题行剩下的空间就还给
+   标题本身 —— 这是 claude-style 的 headerBand 做法，我们只借位置，不借它的
+   整套隐藏/渐隐体系。
+
+   为什么要用 CSS 而不是 JS 量：
+     窗口控件（最小化/最大化/关闭）的宽度在 Windows 上是变量（系统 DPI、
+     窗口状态都会影响）。Electron 把这块信息暴露成 CSS 环境变量
+     `env(titlebar-area-width)` / `env(titlebar-area-height)`，实测取值
+     1143px / 40px（窗口 1280 宽 → 三键占 137px），比 claude 兜底的 140px
+     更准。所以整件事不需要一行 JS，也不需要监听 resize。
+
+   两个前置条件（缺一个按钮就落不下来）：
+     1. `header` 自己不能带 backdrop-filter。blur/filter 会给 position:fixed
+        的后代创建 containing block（CSS Filter Effects 规范），fixed 就变成
+        相对 header 定位，按钮只能落在 header 顶部（实测 y=46 而不是 y=6）。
+        15-polish.css 的 P1 已经把毛玻璃挪到 `header::before` 上，这里只做
+        说明，不重复声明。
+     2. 祖先链上的 overflow:hidden 不影响 fixed（fixed 只被 transform /
+        filter / backdrop-filter / contain / will-change 约束），实测祖先里
+        `_root`、`_centerCol`、`_frame` 三个 overflow:hidden 都没有副作用。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   B1 右侧操作按钮抬进标题栏
+   ----------------------------------------------------------------------------
+   锚点用 `div:has(> [data-slot="conversation.session.header.utilities"])`：
+   宿主的 headerUtilities 自己长什么样是 CSS-module 类名（`Dc7zOa_` 前缀会随
+   版本变），但它一定「有且只有一个直接子级是那个具名槽」，属性是稳定契约。
+
+   right 的算法：视口宽 − 标题栏可用宽 + 8px 间隙。
+   `env()` 拿不到时的兜底是 `100vw - 140px`（claude 的 win32 兜底值 140px），
+   这样即使某个宿主不暴露环境变量，按钮也不会压到窗口键上。
+   `top` 取标题栏高度的一半再上移自身一半 —— 正好压在原生标题栏的中线上。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-band="on"]
+  div:has(> [data-slot="conversation.session.header.utilities"]) {
+  position: fixed !important;
+  top: calc(env(titlebar-area-height, 40px) / 2) !important;
+  right: calc(
+    100vw - env(titlebar-area-width, calc(100vw - 140px)) + 8px
+  ) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transform: translateY(-50%) !important;
+  /* 和原生标题栏按钮同层：要压在会话头的渐变纱（z-index:0）之上。 */
+  z-index: 30 !important;
+  /* Windows 下按钮不在拖拽区里，声明 no-drag 是给将来 macOS 留的余地。 */
+  -webkit-app-region: no-drag !important;
+}
+
+/* ----------------------------------------------------------------------------
+   B2 抬走之后标题行右侧留出的空间
+   ----------------------------------------------------------------------------
+   fixed 会把 headerUtilities 从流里摘掉，titleRow 的弹性标题簇自己会长过去
+   （实测 433px → 531px）。这里给标题簇一个右边界，避免徽标一路顶到右侧边栏
+   的边线上；值取「标题行右缘 − 8px」的观感余量。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-band="on"]
+  header:has([data-conversation-tabs])
+  [data-slot="conversation.session.header"]
+  > :first-child
+  > :first-child {
+  padding-inline-end: 8px;
+}
+
+/* ----------------------------------------------------------------------------
+   B3 只有真的能抬才抬
+   ----------------------------------------------------------------------------
+   窗口窄到标题栏放不下（比如 800px 宽、三键各 46px）时，抬上去反而压住标题。
+   用 `@media` 守一道：可用宽度低于 640px 就退回原位（取消 fixed）。
+   `env()` 不能直接进媒体查询，所以这里用视口宽做近似 —— 640px 视口对应
+   标题栏约 500px，足够放下两个按钮（78px）。
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-band="on"]
+    div:has(> [data-slot="conversation.session.header.utilities"]) {
+    position: static !important;
+    transform: none !important;
+    margin-left: 20px !important;
+    z-index: auto !important;
+  }
+}
