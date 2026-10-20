@@ -7,6 +7,16 @@
 
    作用域：html[data-dsh-furina] .fh-set —— 插件卸载（属性消失）即全部失效。
    类名统一 fh-set- 前缀，不会撞到宿主或别的插件。
+
+   ---------------------------------------------------------------------------
+   0.9.1 排版重做：向 dsh-claude-style 的设置语言对齐
+   ---------------------------------------------------------------------------
+   对照材料见 C:\Users\11515\AppData\Local\Temp\mine-settings.md
+   （§1 骨架 / §2 行排版 / §3.1 Switch / §3.2 Segmented），要点：
+     · 设置区不再是卡片，而是「行 + 0.5px 分隔线」的裸列表；
+     · 行标题 14px/400（原来是 13px/550），用行高和明度分层而不是加粗；
+     · 开关 38×22 → 36×20，分段按钮去掉外框、圆角 12 → 7。
+   改动只在本文件；src/client.js 的 DOM 结构与全部 fh-set-* 类名保持原样。
    ========================================================================== */
 
 html[data-dsh-furina] .fh-set {
@@ -24,59 +34,99 @@ html[data-dsh-furina] .fh-set-head {
   gap: 4px;
 }
 
+/* 标题：claude 设置页标题 15px/600（报告 §1 .dsh-claude-settings-title）。
+   原来 16px/650 再加 0.01em 字距，比宿主自己的区块标题还重，这里压回 15/600。 */
 html[data-dsh-furina] .fh-set-title {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
 }
 
+/* 描述：claude 用 12px / 18px / label-secondary（报告 §1 notice 行同规格）。
+   原来 12.5px + line-height:1.5 —— 非整数字号在 125%/150% 缩放下会糊，
+   而且 1.5 倍行高算出 18.75px，和 22px 的行标题凑不成整数网格。 */
 html[data-dsh-furina] .fh-set-desc {
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--dsw-alias-label-secondary, #5f6e93);
 }
 
+/* 容器去卡片化。
+   claude 的设置区没有卡片：背景交给宿主设置面板，行与行之间只靠 0.5px
+   分隔线切分（报告 §2）。原来这里是 bg-layer-2 + 1px 边框 + 16px 圆角 +
+   padding:4px 16px，等于在宿主的弹层里又套了一张卡片，两层底色叠在一起
+   还会让内层比外层更亮，视觉重心全跑到卡片边框上。
+   .fh-set-card 这个类名由 client.js 生成，不能删，只把外观清零。 */
 html[data-dsh-furina] .fh-set-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  background: var(--dsw-alias-bg-layer-2, color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 88%, transparent));
-  border: 1px solid var(--dsw-alias-border-l1, rgba(44, 58, 115, 0.12));
-  border-radius: var(--dsw-radius-lg, 16px);
-  padding: 4px 16px;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
+/* 设置行。claude 原文：
+   display:flex;align-items:center;flex-wrap:wrap;gap:12px 8px;
+   padding:16px 0;border-top:.5px solid var(--dsw-alias-border-l2)
+   原来 justify-content:space-between + gap:20px + padding:12px 0 + 1px 线：
+   space-between 在窄面板里会把控件顶到最右、中间留一大条空洞，换成 claude 的
+   flex-wrap 之后，宽度不够时控件整块换到下一行，不再把文字挤成多行。
+   0.5px 是 claude 原文；1x 屏浏览器会取整成 1px，2x 屏才是半像素发丝线。
+   行本身没有 hover 底色：claude 的行没有 hover 态（报告 §2），hover 只做在
+   控件上，所以这里一条 :hover 都没写。 */
 html[data-dsh-furina] .fh-set-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 12px 0;
-  border-top: 1px solid var(--dsw-alias-border-l1, rgba(44, 58, 115, 0.1));
+  flex-wrap: wrap;
+  gap: 12px 8px;
+  padding: 16px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2, rgba(44, 58, 115, 0.2));
 }
 
-html[data-dsh-furina] .fh-set-row:first-child {
+/* 首行不画线（claude 的 .dsh-claude-settings-rows > :first-child）。
+   .fh-set-card 的直接子元素全是 Row，所以这一条足够。 */
+html[data-dsh-furina] .fh-set-card > .fh-set-row:first-child {
   border-top: none;
 }
 
+/* 文字块：claude 原文 flex:1 1 140px;min-width:0;flex-direction:column;
+   gap:4px;padding-right:48px。右留白 48px 让贴右的控件不会顶到文字，
+   也让换行后的控件行和眼睛对得齐。原来是 gap:3px、没有 flex 基准宽度，
+   文字块会被控件按内容宽度挤压。 */
 html[data-dsh-furina] .fh-set-rowtext {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  flex: 1 1 140px;
   min-width: 0;
+  padding-right: 48px;
 }
 
+/* 行标题：claude 14px / 400 / 22px 行高（报告 §2 表格）。
+   原来 13px/550 —— 550 是可变字重的半粗，在系统字体上通常落到 500/600，
+   整页读起来像一列加粗标签。claude 全部用常规字重，靠行高和
+   label-primary / label-tertiary 的明度差分层次，这里跟随。 */
 html[data-dsh-furina] .fh-set-name {
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary, #1d2539);
 }
 
+/* 行描述：claude 12px / 18px / label-tertiary（报告 §2 表格）。
+   原来 11.5px + 1.45 —— 非整数字号 + 非整数行高，换成 12/18 的整数组合，
+   和 22px 的行标题正好是 1.22 倍的垂直节奏。 */
 html[data-dsh-furina] .fh-set-hint {
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--dsw-alias-label-tertiary, #7c8bab);
 }
 
+/* 控件区：claude 没有 justify-content，控件跟在文字块后面，靠文字块的
+   flex:1 1 140px 吸掉剩余空间自然贴右。flex:none 保证控件不被压缩
+   （分段按钮和滑块的宽度是内容决定的，压了会掉字/掉把手）。 */
 html[data-dsh-furina] .fh-set-control {
   display: flex;
   align-items: center;
@@ -86,25 +136,51 @@ html[data-dsh-furina] .fh-set-control {
 
 /* ---- 分段按钮 ------------------------------------------------------------ */
 
+/* 容器：claude 原文
+   flex:none;align-items:center;gap:2px;padding:2px;border-radius:7px;
+   background:var(--dsw-specific-selector);display:inline-flex;position:relative
+   原来是 bg-base 70% 混合 + 1px border-l2 + radius-md(12px)。去掉描边是因为
+   claude 的段落靠底色差分层次、不加边；圆角 12 → 7 之后，按钮圆角从
+   calc(12-3)=9 收到 5，才不会出现「胶囊里再套一个胶囊」。 */
 html[data-dsh-furina] .fh-set-seg {
   display: inline-flex;
-  padding: 2px;
+  align-items: center;
   gap: 2px;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 70%, transparent);
-  border: 1px solid var(--dsw-alias-border-l2, rgba(44, 58, 115, 0.2));
-  border-radius: var(--dsw-radius-md, 12px);
+  padding: 2px;
+  position: relative;
+  background: var(--dsw-specific-selector, rgba(44, 58, 115, 0.06));
+  border: none;
+  border-radius: 7px;
 }
 
+/* 亮色下 claude 的容器不是 specific-selector，而是专门的 chip 色
+   （报告 §3.2：.dsh-claude-segments{background:var(--dsh-claude-chip)} = #f6f6f4）。
+   宿主没有 chip 这个 token，用 bg-layer-3 近似：亮色 #e9eef9，和面板底
+   （#f4f7fd 一档）有清楚的层级差，又不会比旁边的行标题更抢眼。
+   选择器必须把 body 写进来 —— data-ds-dark-theme 挂在 <body> 上，
+   挂在 html 上的 :not([data-ds-dark-theme]) 永远为真（15-polish.css 里
+   记着 0.4.0 就是这么把暗色界面涂出一条亮带的）。 */
+html[data-dsh-furina] body:not([data-ds-dark-theme]) .fh-set-seg {
+  background: var(--dsw-alias-bg-layer-3, rgba(221, 227, 241, 0.96));
+}
+
+/* 按钮：claude 原文 font:inherit;font-size:14px;font-weight:500;
+   line-height:18px;padding:3px 12px;border-radius:7px;color:label-secondary
+   字号 13px 而不是 14：宿主设置面板本身的正文就是 13px，14 会跟宿主自己的
+   行标题打架。padding 上下取 5px（claude 是 3px），让控件总高 =
+   18 + 5×2 + 容器 2×2 = 32px，和宿主其它按钮高度看齐（claude 那边是
+   18 + 3×2 + 4 = 28px，比周围按钮矮一档）。 */
 html[data-dsh-furina] .fh-set-seg-btn {
   appearance: none;
   border: none;
   background: transparent;
   color: var(--dsw-alias-label-secondary, #5f6e93);
   font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  padding: 6px 12px;
-  border-radius: calc(var(--dsw-radius-md, 12px) - 3px);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  padding: 5px 12px;
+  border-radius: 5px;
   cursor: pointer;
   transition:
     background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
@@ -115,14 +191,31 @@ html[data-dsh-furina] .fh-set-seg-btn:hover {
   color: var(--dsw-alias-label-primary, #1d2539);
 }
 
+/* 选中态：claude 深色是 background:var(--dsw-alias-bg-layer-3) 的纯色块，
+   亮色换 bg-overlay + box-shadow:0 1px 2px #14141314（报告 §3.2）。
+   原来是品牌色实心 + label-primary-foreground 白字。改成浅色块之后
+   **不再需要 --dsw-alias-label-primary-foreground**：那个 token 存在的全部
+   理由是「暗色品牌色 #7f96d2 上压白字只有 2.92:1」（审计 #7），现在选中态是
+   layer-3 / overlay 上的 label-primary #dbe2f2，对比度由宿主调色板保证，
+   白字方案连同它的对比度问题一起消失。
+   字重从 600 回到 500：claude 的激活态只靠底色区分，不另外加粗。 */
 html[data-dsh-furina] .fh-set-seg-btn.is-on {
-  background: var(--dsw-alias-brand-primary, #4a5fa8);
-  /* 不能用 #fff：暗色品牌色 rgb(127,150,210) 配白字只有 2.92:1（审计 #7），
-     宿主为此专门提供了 label-primary-foreground（亮底深字 / 暗底浅字）。 */
-  color: var(--dsw-alias-label-primary-foreground, #fff);
-  font-weight: 600;
+  background: var(--dsw-alias-bg-layer-3, rgba(221, 227, 241, 0.96));
+  color: var(--dsw-alias-label-primary, #1d2539);
+  font-weight: 500;
 }
 
+/* 亮色选中态：overlay（#f8fafe）+ 1px 投影，像一块浮在 chip 色轨道上的
+   小面，和暗色用同一个 layer-3 色块形成对称。 */
+html[data-dsh-furina] body:not([data-ds-dark-theme]) .fh-set-seg-btn.is-on {
+  background: var(--dsw-alias-bg-overlay, #f8fafe);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+/* 焦点环。claude 是 2px 品牌色 + offset 1；宿主自身 offset 2，这里沿用
+   原来的 2px + 2px —— 设置页是键盘用户最爱走的路径，环稍微外一点不会
+   和相邻行挤在一起。四个可聚焦控件一个都不能漏（.fh-set-range 是
+   input，其余三个是 button）。 */
 html[data-dsh-furina] .fh-set-seg-btn:focus-visible,
 html[data-dsh-furina] .fh-set-switch:focus-visible,
 html[data-dsh-furina] .fh-set-reset:focus-visible,
@@ -133,48 +226,82 @@ html[data-dsh-furina] .fh-set-range:focus-visible {
 
 /* ---- 开关 ---------------------------------------------------------------- */
 
+/* 开关：claude 原文
+   flex:none;appearance:none;border:0;cursor:pointer;width:36px;height:20px;
+   padding:2px;box-sizing:border-box;border-radius:10px;
+   background:var(--dsw-specific-selector)（报告 §3.1）
+   原来是 38×22 + 1px border-l3 + radius 999px。换成 36×20 之后：
+   内槽 36 − 2×2 = 32，knob 16，行程正好 32 − 16 = 16px。
+   圆角 10 就是高度的一半，仍是视觉全圆，但比 999px 更贴 claude 的
+   corner-shape:round 语义；padding 用 2px 是因为 knob 用 top/left 2px 定位
+   加 translate，行程可以直接读成「内槽宽 − knob 宽」。
+   box-sizing 必须显式写：宿主没有全局 box-sizing 重置（全仓只有
+   60-caret.css 一处 content-box），不写就会变成 36+2×2 = 40 宽。 */
 html[data-dsh-furina] .fh-set-switch {
   appearance: none;
   position: relative;
-  width: 38px;
-  height: 22px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid var(--dsw-alias-border-l3, rgba(44, 58, 115, 0.32));
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 60%, transparent);
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 0;
+  background: var(--dsw-specific-selector, rgba(44, 58, 115, 0.06));
   cursor: pointer;
-  transition:
-    background-color var(--fh-dur-surface, 180ms) var(--fh-ease-glide, ease),
-    border-color var(--fh-dur-surface, 180ms) var(--fh-ease-glide, ease);
+  transition: background-color var(--fh-dur-move, 200ms) var(--fh-ease-glide, ease);
 }
 
+/* 开态：claude 直接吃品牌色 --dsw-alias-brand-primary（claude 皮肤下 #d97757）。
+   宿主这边亮色 #4a5fa8 / 暗色 #7f96d2，白圆点压上去对比度都够，
+   不需要再借 label-primary-foreground。 */
 html[data-dsh-furina] .fh-set-switch.is-on {
   background: var(--dsw-alias-brand-primary, #4a5fa8);
-  border-color: var(--dsw-alias-brand-primary, #4a5fa8);
 }
 
+/* knob：claude 原文 display:block;width:16px;height:16px;border-radius:50%;
+   background:var(--dsw-alias-bg-overlay,#ffffff);box-shadow:0 1px 2px #1414132e
+   原来用 bg-layer-1(#ffffff) + --dsw-shadow-lv1(25% 黑)：亮色下圆点和轨道
+   几乎同色，圆点边缘只剩投影撑着。claude 改用 overlay 层（语义就是「浮起来
+   的那一层」）+ 18% 的 2px 投影，边缘才干净。
+   暗色例外：我们的 --dsw-alias-bg-overlay 在暗色是 #1a2238f7（深蓝、近不
+   透明），照抄会让圆点埋进 #2a3a5e 的轨道里。所以暗色单独固定成近白 ——
+   「深色轨道 + 白圆点」这个视觉事实必须保住，色值可以偏离 token。 */
 html[data-dsh-furina] .fh-set-knob {
+  display: block;
   position: absolute;
   top: 2px;
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-1, #fff);
-  box-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(20, 30, 60, 0.25));
-  transition: transform var(--fh-dur-surface, 180ms) var(--fh-ease-enter, ease);
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-overlay, #ffffff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+  /* 行程写成变量，和上面「内槽 32 − knob 16 = 16」的算式对得上。 */
+  --fh-switch-travel: 16px;
+  transition: transform var(--fh-dur-move, 200ms) var(--fh-ease-enter, ease);
+}
+
+html[data-dsh-furina] body[data-ds-dark-theme] .fh-set-knob {
+  background: #e8eefb;
 }
 
 html[data-dsh-furina] .fh-set-switch.is-on .fh-set-knob {
-  transform: translateX(16px);
+  transform: translateX(var(--fh-switch-travel, 16px));
 }
 
 /* ---- 滑块 ---------------------------------------------------------------- */
 
+/* 滑块：claude 的设置页没有 range（报告 §3.3 核查：CSS 里 type=range 命中 0），
+   所以这一段没有对照物，只做和行网格对齐的微调：轨道仍是 4px、品牌色 26%
+   混合底，thumb 仍是 14px 品牌实心。设置页有 6 个 range（背景浓度 / 水膜 /
+   图片高度 ×2 / 引用浓度），宽度 132px 是实测能完整显示「100%」的宽度。 */
 html[data-dsh-furina] .fh-set-range {
   appearance: none;
   width: 132px;
   height: 4px;
+  flex: none;
+  margin: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4a5fa8) 26%, transparent);
   cursor: pointer;
@@ -185,32 +312,50 @@ html[data-dsh-furina] .fh-set-range:disabled {
   cursor: default;
 }
 
+/* 两个引擎分开写：宿主跑 Chromium，但用 Firefox 调试时也不能掉样式。 */
 html[data-dsh-furina] .fh-set-range::-webkit-slider-thumb {
   appearance: none;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: 50%;
   border: none;
   background: var(--dsw-alias-brand-primary, #4a5fa8);
-  box-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(20, 30, 60, 0.3));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
+html[data-dsh-furina] .fh-set-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: none;
+  background: var(--dsw-alias-brand-primary, #4a5fa8);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+}
+
+/* 数值：claude 行内数值是 12px / tabular-nums / label-secondary。
+   等宽数字避免拖动滑块时整行左右抖（min-width:3ch 兜住个位/两位/100%）。 */
 html[data-dsh-furina] .fh-set-value {
   font-size: 12px;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-secondary, #5f6e93);
   min-width: 3ch;
   text-align: right;
+  flex: none;
 }
 
 /* ---- 页脚 / 状态 --------------------------------------------------------- */
 
+/* 页脚：卡片内边距没了之后，它和最后一行之间只剩 .fh-set 的 16px gap，
+   这里补 4px 上内边距把它和行组拉开一点，不再额外画线 —— 最后一行自带
+   上分隔线，页脚再画一条会出现「两条线夹一条空行」。 */
 html[data-dsh-furina] .fh-set-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding-top: 4px;
 }
 
 html[data-dsh-furina] .fh-set-footline {
@@ -218,11 +363,14 @@ html[data-dsh-furina] .fh-set-footline {
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  line-height: 18px;
   color: var(--dsw-alias-label-tertiary, #7c8bab);
 }
 
+/* 600 → 500：行标题已经降到 400，页脚标签再用 600 会比整页任何文字都重；
+   claude 的次级标签一律 500。 */
 html[data-dsh-furina] .fh-set-footlabel {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--dsw-alias-label-secondary, #5f6e93);
 }
 
@@ -239,6 +387,8 @@ html[data-dsh-furina] .fh-set-dot {
   background: var(--dsw-alias-state-success-primary, #58b058);
 }
 
+/* 重置按钮：设置页唯一的次级动作，保持透明底（实心会抢走滑块和开关的视线）。
+   圆角、行高、内边距对齐 12/18 的正文网格，和分段按钮同一套手感。 */
 html[data-dsh-furina] .fh-set-reset {
   appearance: none;
   border: 1px solid var(--dsw-alias-border-l2, rgba(44, 58, 115, 0.2));
@@ -246,8 +396,9 @@ html[data-dsh-furina] .fh-set-reset {
   color: var(--dsw-alias-label-secondary, #5f6e93);
   font: inherit;
   font-size: 12px;
+  line-height: 18px;
   padding: 5px 14px;
-  border-radius: var(--dsw-radius-sm, 8px);
+  border-radius: 8px;
   cursor: pointer;
   transition:
     color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
@@ -259,7 +410,9 @@ html[data-dsh-furina] .fh-set-reset:hover {
   border-color: var(--dsw-alias-brand-primary, #4a5fa8);
 }
 
-/* 减弱动效：设置页自己的过渡也一起关掉 */
+/* 减弱动效：设置页自己的过渡一起关掉。
+   knob 的 transform 不在这个列表里 —— transition:none 只停过渡，
+   .is-on 的 translateX(16px) 照样生效，开关状态仍然看得出来。 */
 html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-seg-btn,
 html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-switch,
 html[data-dsh-furina][data-dsh-furina-motion="reduced"] .fh-set-knob,

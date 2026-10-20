@@ -45,6 +45,181 @@
 > **0.9.0 起**：右侧边栏的标签文字不再被渐隐吃掉（根因是我们自己一条
 > `::before` 撑出的 9px 幻影溢出）；输入框里换成**平滑移动的光标**
 > （自绘一条细线跟着走，保留原生 1s 闪烁），可在设置里关掉。
+> **0.10.0 起**：整条输入区按 claude 的几何重排 —— 工具行钉成恒定 28px 单行、
+> 「+」搬进卡面内部左下变成 24×24 圆角方块、发送键搬进卡面内部右下，
+> 权限 / 模型落到卡下同一行；设置页去卡片化（行 + 0.5px 分隔线、行标题 14/400）；
+> 右侧栏账号行与它 portal 出来的菜单、会话头右上那颗 dock 开关也一并对齐 claude。
+
+### 0.10.0 做了什么
+
+这一版的验收标准是用户一句话给全的：
+
+> 「这个按钮也仿照 claude 皮肤做吧，然后这个设置部分也按照 claude 皮肤做，
+> 然后加号放到输入框左边，做成方形的，权限部分放在底部，仿照 claude 皮肤的，
+> 模型选择也放在底部仿照 claude，发送消息按钮做进输入框里，参考 claude 那样。」
+
+拆开就是五件事，加一件顺手补的（窗口 chrome）。所有数值都来自对 claude-style
+的实测，不是估的。
+
+#### 一、工具行钉死成 28px 单行（`17-composer.css` C6）
+
+宿主 `.row` 是 `flex-wrap: wrap; justify-content: space-between; gap: 12px`，
+窗口一窄「模型」和「发送」就被挤到第二行，整卡高度在 83 / 111 之间跳。
+
+claude 的工具行是恒定单行：`flex-wrap: nowrap; align-items: center; gap: 8px;
+padding: 0 4px; height: 28px; min-height: 28px`。这里照抄这组数字，只把
+`margin-top` 显式归零 —— claude 原版是 `card gap: 0` + `margin-top: 6px`，
+而 C1 已经把 card 的 `gap` 定成 8px，再加 6 就是 14px，会推翻后面两条的锚点。
+
+于是有了一条恒定等式，C7 / C8 直接引用它：
+
+```
+card 底边 − 卡面 [data-input-scroll] 底边
+  = 工具行 28px + C1 的 gap 8px
+  = 36px
+```
+
+#### 二、「+」搬进卡面内部左下（C7）
+
+宿主 `.add` 是 28×28 的**实心圆**（`border-radius: 999px`、`background:
+var(--dsw-specific-selector)`），长在底部工具行的最左边。claude 的「+」是
+24×24、圆角 6px 的**透明方块**，悬停才浮出一层水膜，而且长在输入框内部左端。
+
+纯 CSS 搬不动父级（「+」的祖先是 `_tools`，`_tools` 又在 `_row` 里），
+所以用绝对定位贴合：
+
+```css
+[class*="_tools"] button[class*="_add"] {
+  position: absolute;
+  left: 6px;
+  bottom: calc(36px + 8.5px);   /* 36 = 工具行 28 + gap 8；(41 − 24) / 2 = 8.5 */
+}
+```
+
+**为什么锚 `bottom` 而绝不锚 `top`**：`[data-composer-card]` 的孩子顺序是
+`overlayAnchor → 附件轨 → 卡面 → 工具行`，附件轨一出现整张卡是**向上长高**
+的（composer 钉在视口底部）。用 `top` 定位的按钮会留在原高度，正好掉在附件
+缩略图上；工具行永远贴着 card 底边，所以 `bottom` 在「空态 / 有附件 / 多行
+输入」三种形态下都稳定。
+
+#### 三、发送键搬进卡面内部右下（C8）
+
+宿主 `.primary` 是 34×34 实心圆 + `transform: translateY(-2px)`。claude 的
+发送键是 28×28、圆角 7px 的透明小方块，压在卡面右下角，默认只有一根 0.5px
+发丝边 + `label-caption` 色的箭头；有内容才提亮，hover 浮水膜，按下缩 0.97。
+
+选中最后一个孩子而不是「所有 `_primary`」：运行中且可继续时
+（`interruptible`）trailing 里会同时存在「额外停止键 + 主键」两个 `_primary`，
+这里只搬主键（主键永远是 trailing 的最后一个孩子，可能被 Tooltip 包一层）。
+宿主的 `translateY(-2px)` 必须归零，否则会被顶出卡面中线。
+
+底部算式同前，按 28px 高居中：`bottom = 36 + (41 − 28) / 2 = 42.5px`。
+
+#### 四、卡内文字给两颗按钮让位（C10）
+
+占位符是**绝对定位**的，不跟输入框内边距走，所以两处必须同时改：
+
+```css
+[data-input-scroll] [data-composer-input] { padding: 6px 40px 6px 36px; }
+[data-composer-placeholder]               { inset: 6px 40px auto 36px; }
+```
+
+左 36 = 「+」占 6→30 + 6px 呼吸；右 40 = 发送键占 8→36 + 4px 呼吸。
+
+#### 五、权限 / 模型触发器收敛（C9）
+
+宿主这两颗分别是 24px 高的胶囊和 28px 高的下拉，`15-polish.css` 的 P4 已经
+统一过一轮（圆角 8px、brand 13% 水膜）。claude 的更方：**7px 圆角 + 13px 字 +
+透明底**。只改「形状 / 字号 / 底色」，不改高度和 padding —— 工具行已经被 C6
+钉成 28px，动高度会溢出卡底。
+
+#### 六、设置页去掉卡片（`40-settings.css`）
+
+以前设置区是「宿主弹层里再套一张卡片」：`bg-layer-2` + 1px 边框 + 16px 圆角
++ `padding: 4px 16px`。两层底色叠起来，内层反而比外层更亮，视觉重心全跑到
+卡片边框上。
+
+claude 的设置区**没有卡片**：背景交给宿主，行与行之间只靠 0.5px 分隔线切分。
+
+| | 以前 | 现在 |
+| --- | --- | --- |
+| 容器 | `bg-layer-2` + 1px 边 + 圆角 16 + 内边距 | 全清零（类名保留，外观清零） |
+| 行 | `space-between` + gap 20 + padding 12 | `flex-wrap` + gap 12/8 + padding 16 |
+| 分隔线 | 1px `border-l1` | 0.5px `border-l2`（2x 屏才是发丝线） |
+| 行标题 | 13px / 550 | 14px / 400 / 行高 22 |
+| 行描述 | 11.5px / 1.45 | 12px / 18px |
+| 开关 | 38×22 + 1px 描边 + 圆角 999 | 36×20 + 无描边 + 圆角 10 |
+| 分段按钮 | 12px 字 / 品牌色实心 / 600 字重 | 13px 字 / `layer-3` 色块 / 500 字重 |
+
+`space-between` 在窄面板里会把控件顶到最右、中间留一大条空洞；换成 claude 的
+`flex-wrap` + `flex: 1 1 140px` 之后，宽度不够时控件整块换到下一行，不再把
+文字挤成多行。那个 `0.5px` 是 claude 原文：1x 屏浏览器会取整成 1px，2x 屏才是真发丝线。
+
+开关改成 36×20 之后有个白送的好处：内槽 `36 − 2×2 = 32`，knob 16，行程正好
+`32 − 16 = 16px`，一个整数。`box-sizing` 必须显式写 `border-box` —— 宿主没有
+全局 `box-sizing` 重置，不写就会变成 `36 + 2×2 = 40` 宽。
+
+**选中态顺手修掉了一个对比度隐患**：以前是品牌色实心 + `label-primary-foreground`
+白字，那个 token 存在的全部理由就是「暗色品牌色 `#7f96d2` 上压白字只有 2.92:1」。
+现在选中态是 `layer-3` / `overlay` 上的 `label-primary`，对比度由宿主调色板保证，
+白字方案连同它的问题一起消失。
+
+#### 七、窗口 chrome：右上 dock 开关 / 侧栏账号行 / 账号菜单（新增 `58-chrome.css`）
+
+这一层只做「让宿主已有的控件换上 claude 的比例」，不加元素、不搬家、不抢事件。
+
+宿主真实 DOM（来自 app.asar 里的 `AccountMenu.jsx` 与 Menu 原语，不是猜的）：
+
+```
+div[data-slot="settings.launcher"]            ← display: contents
+  └ div.…_root
+      └ button.…_trigger
+          ├ span.…_avatar [data-avatar-status]
+          └ span.…_label
+账号菜单（portal 到 body）：
+body > div[role="menu"]
+      ├ div[aria-hidden]                      ← 真正画底色的那一层
+      └ div[role="presentation"] > div > button[role="menuitem"]
+            ├ span > svg                       ← 16px 图标
+            ├ span                             ← 标签
+            └ span > kbd                       ← 只有「设置」有快捷键
+```
+
+三条纪律：
+
+1. **优先锚 `data-slot` 具名槽**（`settings.launcher`、
+   `conversation.session.header.corner`）—— 它们是宿主 `ctx.slots.inject()`
+   注册的跨版本契约，不随构建哈希变化；
+2. **不写哈希类名**。账号行是 `ET65mq_trigger` 这种「哈希前缀_名字」，菜单原语
+   是 `_itemIcon_4ub78_148` 这种「_名字_哈希_序号」，每次发版都变。内部结构一律
+   用 `:nth-child(2)` / `:first-child:has(svg)` / `:has(kbd)` 表达；
+3. 菜单是 portal 到 `body` 的，不继承侧栏上下文 —— 颜色能跟随主题，是因为
+   `--dsw-*` 别名声明在 `body` 上（见 `00-tokens.css`）。
+
+比例：dock 开关 28→26（claude 侧边栏折叠按钮实测 26px，退成「附属控件」）；
+账号行 44→32 高、`padding 0 8px`、圆角 6、13px 字、头像 24→18。
+
+有两处值得一提：
+
+- 账号行右侧的箭头用 **SVG mask** 而不是 border 旋转（border 画出来是直角
+  梯形，200% DPI 下明显发毛）。但当前宿主 `AccountMenu.jsx` 的 children 只有
+  `[avatar, label]`、**没有** chevron，而 live 探针报告看到过一枚 —— 所以伪元素
+  加了两道守卫 `:not(:has(> svg:last-child)):not(:has(> :last-child svg))`，
+  宿主自带箭头时我们不补，没有时才补。
+  ⚠️ 这两个 `:has()` 必须写成**平行**的，CSS 规范禁止嵌套 `:has()`，Chromium
+  会把整条选择器判为无效。
+- 用户名的取法是 `> span:nth-child(2)`（第二个**孩子**，不是第二个 span）：
+  登录是 `[span.avatar, span.label]`，未登录是 `[svg, span.label]`，折叠时
+  label 整个不渲染 —— 三种情况「第 2 个孩子」要么是用户名、要么不存在，两头都
+  不会误伤。刻意不用 `:last-child`：将来末尾追加角标就取错了。
+
+#### 这一版没做的事
+
+- 额外那个停止键（`interruptible` 时的第二颗 `_primary`）仍留在工具行里，
+  属于少数派状态，暂不处理；
+- 滑块的段落没有 claude 对照物（claude 设置页 `input[type=range]` 命中 0），
+  只做了与行网格对齐的微调，没有重画；
+- 设置页只改 CSS，`src/client.js` 的 DOM 结构与全部 `fh-set-*` 类名保持原样。
 
 ### 0.9.0 做了什么
 
@@ -595,14 +770,15 @@ dsh-furina-style/
 │   ├── 10-layout.css     # 布局（L1–L11，含图片显示大小与并列排布）
 │   ├── 15-polish.css     # 精修层（P1–P9，宿主已画但对的地方补质感）
 │   ├── 16-band.css       # 会话头操作按钮抬进原生标题栏（B1–B3）
-│   ├── 17-composer.css   # 输入区独立成卡（C1–C5）
+│   ├── 17-composer.css   # 输入区独立成卡（C1–C10，工具行 28px / + 与发送键进卡面）
 │   ├── 20-motion.css     # 动效（M1–M11）
 │   ├── 30-surface.css    # 背景插画层 + 让容器背景透明 + 正文水膜
-│   ├── 40-settings.css   # 设置面板样式（.fh-set-*）
+│   ├── 40-settings.css   # 设置面板样式（.fh-set-*，claude 的行 + 0.5px 分隔线）
 │   ├── 50-details.css    # 细节层（行内代码/表格/工具行/占位文案）
 │   ├── 55-rail.css       # 对话导航条（宿主 TurnNavigator 的上色）
 │   ├── 56-status.css     # 运行状态行的小胶囊（S1）
 │   ├── 57-dock.css       # 右侧 dock 面板（K1–K8，磨砂 + 标签条对齐/渐隐修正）
+│   ├── 58-chrome.css     # 窗口 chrome（H1–H5，dock 开关 / 侧栏账号行 / 账号菜单）
 │   ├── 60-caret.css      # 平滑输入光标（自绘层的外观与闪烁）
 │   └── client.js         # 偏好读写 / 属性同步 / 设置面板 / 光标安装器 / 样式注入模板
 ├── lib/client.js         # 构建产物（GENERATED）
@@ -621,6 +797,9 @@ dsh-furina-style/
 - `data-chat-motion` / `-turn` / `-flow-kind` / `data-streaming`
 - `data-windows-titlebar`、`data-sidebar-collapsed`
 - `[role="menu"]` / `[role="dialog"]` / `[role="treeitem"]`
+- `[data-slot="…"]` —— 宿主 `ctx.slots.inject()` 注册的具名槽（`settings.launcher`、
+  `conversation.session.header.corner`、`conversation.input.permission` / `.model`），
+  属于跨版本契约，是 0.10.0 之后最主要的一类锚点
 
 唯一的模糊匹配是 `[class*="_frame"]` —— Windows 上整窗涂色的源头就这一个，
 而它没有 data 属性可抓。规则里都写清了为什么。

@@ -1,5 +1,5 @@
 /* ============================================================================
-   dsh-furina-style — 17. 输入卡（C1–C5）
+   dsh-furina-style — 17. 输入卡（C1–C10）
    ----------------------------------------------------------------------------
    宿主把输入区画成「一整张大卡」：`[data-composer-card]` 自己带底色、圆角、
    阴影，输入行和下面的工具行都长在这张卡里。问题有两个：
@@ -156,5 +156,331 @@ html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="fra
 
 html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"][data-dsh-furina-motion="reduced"]
   [data-input-scroll] {
+  transition: none !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C6 工具行收紧成单行 28px
+   ----------------------------------------------------------------------------
+   宿主 `.RlGAzG_row` 是 `flex-wrap: wrap; justify-content: space-between;
+   gap: 12px; padding: 2px 8px 6px`，窗口一窄「模型」和「发送」就被挤到第二行，
+   整卡高度在 83 / 111 之间跳。
+
+   claude 的工具行是恒定单行 28px：`flex-wrap: nowrap; align-items: center;
+   gap: 8px; padding: 0 4px; height: 28px; min-height: 28px`。这里照抄这组数字。
+
+   只有 `margin-top` 和别人不一样：claude 原版是 card `gap: 0` + `margin-top: 6px`，
+   而我们在 C1 已经把 card 的 `gap` 定成 8px，再加 6 就变成 14px，会推翻
+   C7 / C8 的锚点算式。所以这里把 `margin-top` 显式归零，「卡面 → 工具行」
+   的间距统一由 C1 的 8px 提供，于是有下面这条恒定等式（C7/C8 直接引用）：
+
+     card 底边 − 卡面 [data-input-scroll] 底边
+       = 工具行 28px + C1 的 gap 8px
+       = 36px
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  > [class*="_row"] {
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  height: 28px !important;
+  min-height: 28px !important;
+}
+
+/* 组内间距跟着从 12 → 8（宿主只在 `@container (width<=560px)` 里才降到 8）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  > [class*="_row"]
+  :is([class*="_tools"], [class*="_modes"], [class*="_trailing"], [class*="_standardControls"]) {
+  gap: 8px !important;
+}
+
+/* 左右两组都缩到内容宽，剩下的空隙全交给 trailing 的 `margin-left: auto`
+   去吃（宿主写的是内联 `margin-left: 317px`，那是 JS 量出来的，必须覆盖掉）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  > [class*="_row"]
+  > [class*="_tools"] {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  > [class*="_row"]
+  > [class*="_trailing"] {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C7 「+」按钮搬进卡面内部左下
+   ----------------------------------------------------------------------------
+   宿主 `.RlGAzG_add` 是 28×28 的实心圆
+   （`background: var(--dsw-specific-selector); border-radius: 999px`），
+   长在底部工具行的最左边。claude 的「+」是 24×24、圆角 6px 的透明方块，
+   悬停才浮出一层水膜，而且它长在**输入框内部左端**、和第一行文字垂直居中
+   ——不在工具行最左边。
+
+   纯 CSS 搬不动父级（「+」的祖先是 `_tools`，`_tools` 又在 `_row` 里），
+   所以用「绝对定位贴合」：让按钮脱离文档流，按卡面内部的坐标重新摆。
+   宿主 `.RlGAzG_card` 自带 `position: relative`，C1 没动过这一条，不再重复写。
+
+   ⚠️ 为什么锚 `bottom` 而绝不锚 `top`：
+   `[data-composer-card]` 的孩子顺序是
+     overlayAnchor → [data-slot="conversation.input.attachments"] → 卡面 → 工具行
+   附件轨一出现，整张卡是**向上长高**的（composer 钉在视口底部）。用 `top`
+   定位的按钮会留在原来的高度，正好掉在附件缩略图上；工具行永远贴着 card 底边，
+   所以 `bottom` 在「空态 / 有附件 / 多行输入」三种形态下都稳定。
+
+   算式（C6 生效后）：
+     · 卡面底边距 card 底边 = 工具行 28 + C1 的 gap 8 = 36px
+     · 「+」24px 高，在单行 41px 的卡面里垂直居中 → 距卡面底边 (41 − 24) / 2 = 8.5px
+     · ⇒ bottom = 36 + 8.5 = 44.5px
+   水平 left: 6px：按钮占 6 → 30，文字从 36 起（见 C10），中间留 6px 呼吸。
+
+   补充：`_row` 带 `container-type: inline-size`，按 CSS Containment 规范它同时
+   获得了 `contain: layout`，于是绝对定位的包含块是 `_row` 而不是 `card`。
+   这不影响算式——`_row` 是 card 的最后一个孩子、card 的 `padding` 已被 C1 清零，
+   它的左 / 下边和 card 的左 / 下边重合；而且 layout containment 不裁剪溢出。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_tools"]
+  button[class*="_add"] {
+  position: absolute !important;
+  left: 6px !important;
+  bottom: calc(36px + 8.5px) !important;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--dsw-alias-label-secondary) !important;
+  z-index: var(--fh-layer-control, 10) !important;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_tools"]
+  button[class*="_add"]:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 13%,
+    transparent
+  ) !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_tools"]
+  button[class*="_add"]:active:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 20%,
+    transparent
+  ) !important;
+}
+
+/* 图标是宿主自带的 `IconPlusOutlineMedium`（14px svg），不换图标，只钉尺寸，
+   免得将来 size 参数变大把 24px 的方盒撑破。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_tools"]
+  button[class*="_add"]
+  svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C8 发送 / 停止按钮搬进卡面内部右下
+   ----------------------------------------------------------------------------
+   宿主 `.RlGAzG_primary` 是 34×34 的实心圆（`background:
+   var(--dsw-alias-button-info-fill); border-radius: 999px; transform:
+   translateY(-2px)`）。claude 的发送键是 28×28、圆角 7px 的透明小方块，
+   压在卡面右下角，默认只有一根 0.5px 发丝边 + `label-caption` 色的箭头；
+   有内容时才提亮，hover 浮水膜，按下缩 0.97。
+
+   选中最后一个孩子而不是「所有 `_primary`」：运行中且可继续时
+   （`interruptible`）trailing 里会同时存在「额外停止键 + 主键」两个 `_primary`，
+   我们只搬主键（主键永远是 trailing 的最后一个孩子，可能被 Tooltip 包一层）。
+   额外那个停止键留在工具行里，属于少数派状态，暂不处理。
+
+   算式（C6 生效后）：
+     · 卡面底边距 card 底边 = 28（工具行） + 8（C1 gap） = 36px
+     · 发送键 28px 高，在 41px 卡面里居中 → 距卡面底边 (41 − 28) / 2 = 6.5px
+     · ⇒ bottom = 36 + 6.5 = 42.5px
+   水平 right: 8px：按钮占右侧 8 → 36，文字右边界在 40（见 C10），留 4px 呼吸。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child:is(button[class*="_primary"]),
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child
+  button[class*="_primary"] {
+  position: absolute !important;
+  right: 8px !important;
+  bottom: calc(36px + 6.5px) !important;
+  width: 28px !important;
+  height: 28px !important;
+  border: 0.5px solid
+    color-mix(in srgb, var(--dsw-alias-border-l2) 85%, transparent) !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: var(--dsw-alias-label-caption) !important;
+  box-shadow: none !important;
+  /* 宿主的 translateY(-2px) 会把它顶出卡面中线，必须归零；按下态的缩放
+     放在 :active 里单独给，避免和定位的 transform 打架。 */
+  transform: none !important;
+  z-index: var(--fh-layer-control, 10) !important;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    border-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child
+  button[class*="_primary"]:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 13%,
+    transparent
+  ) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 46%,
+    transparent
+  ) !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child
+  button[class*="_primary"]:active:not(:disabled) {
+  transform: scale(var(--fh-scale-press, 0.97)) !important;
+}
+
+/* 禁用态（空输入）宿主给 `opacity: .4`，保留；只确保底色不跟着 hover 变。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child
+  button[class*="_primary"]:disabled {
+  background: transparent !important;
+  color: var(--dsw-alias-label-caption) !important;
+}
+
+/* 图标同样是宿主自带的 svg（发送箭头 / 停止方块），只钉 16px 看着不发虚。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]
+  [class*="_trailing"]
+  > :last-child
+  button[class*="_primary"]
+  svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C9 底部触发器（权限 / 模型）收敛圆角与字号
+   ----------------------------------------------------------------------------
+   宿主权限触发器是 24px 高的胶囊、模型是 28px 高的 `_select` 下拉，
+   `15-polish.css` 的 P4 已经统一过一轮（圆角 8px、brand 13% 水膜、按下 0.97）。
+   claude 的这两颗是**更方的 7px 圆角 + 13px 字 + 透明底**，这里按 claude 的
+   数字再收一档（17 号文件在 15 号之后加载，同特异性时后者胜，再加 !important
+   兜住宿主的 `--dsw-radius-sm`）。
+
+   只改「形状 / 字号 / 底色」，不改高度和内边距 —— 高度留给宿主，工具行已经
+   被 C6 钉成 28px，动高度会溢出卡底。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  :is(
+    [data-slot="conversation.input.permission"],
+    [data-slot="conversation.input.model"]
+  )
+  button {
+  border-radius: 7px !important;
+  font-size: 13px !important;
+  background-color: transparent !important;
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-glide, ease) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  :is(
+    [data-slot="conversation.input.permission"],
+    [data-slot="conversation.input.model"]
+  )
+  button:hover:not(:disabled) {
+  background-color: color-mix(
+    in srgb,
+    var(--dsw-alias-brand-primary) 13%,
+    transparent
+  ) !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+/* ----------------------------------------------------------------------------
+   C10 给卡内两颗按钮让位 + 减弱动效
+   ----------------------------------------------------------------------------
+   C2 里输入框是 `padding: 6px 10px 6px 12px`，现在左右各被占掉一块：
+     · 左：`+` 占 6 → 30，再加 6px 呼吸 ⇒ 左内边距 12 → 36px
+     · 右：发送键占右侧 8 → 36，再加 4px 呼吸 ⇒ 右内边距 10 → 40px
+   占位符是绝对定位的，不跟着输入框内边距走，必须同步改（C2 里是
+   `inset: 6px 10px auto 12px`），垂直的 6px 保持不变。
+   -------------------------------------------------------------------------- */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-input-scroll]
+  [data-composer-input] {
+  padding: 6px 40px 6px 36px !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-placeholder] {
+  inset: 6px 40px auto 36px !important;
+}
+
+/* 新增的三处过渡（「+」/ 发送键 / 触发器）在减弱动效时一并关掉，和 C5 对齐。 */
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    :is(
+      button[class*="_add"],
+      button[class*="_primary"],
+      [data-slot="conversation.input.permission"] button,
+      [data-slot="conversation.input.model"] button
+    ) {
+    transition: none !important;
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"][data-dsh-furina-motion="reduced"]
+  :is(
+    button[class*="_add"],
+    button[class*="_primary"],
+    [data-slot="conversation.input.permission"] button,
+    [data-slot="conversation.input.model"] button
+  ) {
   transition: none !important;
 }

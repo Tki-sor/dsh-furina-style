@@ -864,7 +864,207 @@ probe range → 内容盒左上角，高度回落到 20px。
 
 ---
 
-## 15. 版本之间
+## 15. 0.10.0：把输入区按 claude 的几何重排
+
+这一版没有新功能，改的全是**位置**和**重量**：输入卡里那排按钮原来挂在卡外面
+（工具行），现在要搬进卡面里；工具行原来会换行，现在钉死成一行；设置页原来
+是一叠卡片，现在摊平成行 + 发丝线。
+
+验收标准是用户一句话给的：
+
+> 「这个按钮也仿照 claude 皮肤做吧，然后这个设置部分也按照 claude 皮肤做，
+> 然后加号放到输入框左边，做成方形的，权限部分放在底部，仿照 claude 皮肤的，
+> 模型选择也放在底部仿照 claude，发送消息按钮做进输入框里，参考 claude 那样。」
+
+拆开是五件事，加一件顺手补的（窗口 chrome）。
+
+### 15.1 工具行为什么必须钉成单行
+
+**症状**：窗口一窄，「模型」和「发送」就被挤到第二行，整张输入卡的高度在
+83 / 111 之间跳；光标所在那一行会跟着上下蹿。
+
+**根因**：宿主 `.RlGAzG_row` 是
+
+```css
+flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 2px 8px 6px;
+```
+
+`space-between` + `wrap` 意味着「左右两组各贴一边，中间的空隙靠剩余空间
+撑开」；空间不够时不是压缩，而是把右边那组整个折到下一行。行高因此是一个
+随窗口宽度阶跃的函数。
+
+**实测**：claude 的工具行是恒定单行 ——
+
+```css
+flex-wrap: nowrap; align-items: center; gap: 8px;
+padding: 0 4px; height: 28px; min-height: 28px;
+```
+
+**修法**（C6）：照抄这组数字，**但 `margin-top` 显式归零**。claude 原版是
+card `gap: 0` + 工具行 `margin-top: 6px`；而 0.8.0 的 C1 已经把 card 的
+`gap` 定成 8px，再叠 6 就是 14px，会把后面 C7 / C8 的锚点算式整个推翻。
+
+于是有了一条**恒等式**，C7 / C8 直接引用它：
+
+```
+card 底边 − 卡面 [data-input-scroll] 底边
+  = 工具行 28px + C1 的 gap 8px
+  = 36px
+```
+
+**取舍**：宿主给 `_trailing` 写的是**内联** `margin-left: 317px`（JS 量出来
+的），那是 `space-between` 的替代品。改成 `nowrap` 之后它会把右侧整组推到
+天边，必须用 `margin-left: auto` 覆盖掉，让「剩余空间全给 trailing 吃」这件事
+由 flex 自己算。
+
+### 15.2 绝对定位：为什么只锚 bottom，为什么包含块不是 card
+
+按钮的物理位置在两个祖先之外（「+」在 `_row > _tools` 里），纯 CSS 搬不动
+父级，只能让按钮**脱离文档流**再按卡面坐标摆回去。
+
+**关键一：锚 `bottom`，绝不锚 `top`。**
+`[data-composer-card]` 的孩子顺序是
+
+```
+overlayAnchor → [data-slot="conversation.input.attachments"] → 卡面 → 工具行
+```
+
+附件轨一出现，整张卡是**向上长高**的（composer 钉在视口底部）。用 `top` 定位
+的按钮会留在原来的高度，正好掉在附件缩略图上。工具行永远贴着 card 底边，
+所以 `bottom` 在「空态 / 有附件 / 多行输入」三种形态下都稳定。
+
+**关键二：包含块是 `_row`，不是 card。**
+`_row` 上有 `container-type: inline-size`。按 CSS Containment 规范，容器查询
+的尺寸 containment 隐含 `contain: layout`，于是 `position: absolute` 的
+包含块变成 `_row`。这不影响算式 —— `_row` 是 card 的最后一个孩子，card 的
+`padding` 已被 C1 清零，两者左 / 下边重合；而 layout containment 不裁剪溢出。
+但**必须知道这件事**，否则下次有人给 `_row` 加 `padding` 时，44.5px 会整段偏。
+
+两条算式：
+
+```
+「+」  24px，在单行 41px 的卡面里居中 → 距卡面底边 (41 − 24) / 2 = 8.5
+       bottom = 36 + 8.5 = 44.5px   left: 6px（按钮占 6→30，文字从 36 起）
+发送键 28px                                → 距卡面底边 (41 − 28) / 2 = 6.5
+       bottom = 36 + 6.5 = 42.5px   right: 8px（按钮占右侧 8→36，文字边界 40）
+```
+
+**取舍**：41px 是宿主单行卡面的实测高度（输入行 24 + 上下 padding 6+6 + 边框）。
+它由宿主字体行高决定，会随宿主升级变；但两颗按钮都是居中的，41 变成 43 时
+误差只有 1px，肉眼不可见，不值得为它再引一层 JS 测量。
+
+### 15.3 只搬 `trailing` 的最后一个孩子
+
+运行中且可继续（`interruptible`）时，trailing 里会**同时存在两个
+`_primary`**：「额外停止键」+「主键」。如果按 `button[class*="_primary"]`
+全选，两颗会叠在同一个坐标上。
+
+所以选择器写成 `> :last-child:is(button[class*="_primary"])`，外加一条
+`> :last-child button[class*="_primary"]`（主键可能被 Tooltip 包一层）。
+多出来的那个停止键留在工具行原位 —— 它是少数派状态，先不动。
+
+另外宿主给 `_primary` 写了 `transform: translateY(-2px)`，绝对定位之后这 2px
+会把它顶出卡面中线，必须 `transform: none`；按下态的缩放改到 `:active` 里
+单独给，避免「定位用的 transform」和「反馈用的 transform」互相覆盖。
+
+### 15.4 占位符必须跟着输入框一起改
+
+C2 里输入框是 `padding: 6px 10px 6px 12px`。卡内左右各被占掉一块之后：
+
+```
+左：+ 占 6→30，+6 呼吸 ⇒ padding-left 12 → 36
+右：发送键占 8→36，+4 呼吸 ⇒ padding-right 10 → 40
+```
+
+但**占位符是绝对定位的**（`inset: 6px 10px auto 12px`），它不跟输入框的
+padding 走。只改一边，光标和占位文字就会错开 24px —— 这是最容易漏的一处。
+
+### 15.5 设置页：去卡片化之后才看得见的三件事
+
+**（一）两层底色叠加。**
+原来 `.fh-set-card` 是 `bg-layer-2` + 1px 边 + 16px 圆角 + `padding: 4px 16px`。
+它装在宿主的设置弹层里，等于「弹层底色上又叠一张卡」，内层比外层更亮，
+视觉重心全跑到卡片边框上。claude 的设置区没有卡片：行与行之间只靠
+0.5px 分隔线切分。所以这里 `background: transparent; border: 0; radius: 0;
+padding: 0` —— 类名保留（client.js 生成，不能删），外观清零。
+
+**（二）`space-between` 在窄面板里的空洞。**
+原来是 `justify-content: space-between; gap: 20px`：空间不够时文字被压成多行，
+控件仍顶在最右，中间留一条空。换成 claude 的 `flex-wrap: wrap;
+gap: 12px 8px` + 文字块 `flex: 1 1 140px; padding-right: 48px`：宽度不够时
+控件**整块换到下一行**，不再挤文字。
+
+**（三）0.5px 线在 1x / 2x 屏不是一回事。**
+宿主跑在 Chromium 上，1x 屏会把 0.5px 取整成 1px，2x 屏才是真发丝线。这条
+是 claude 原文（`border-top: .5px solid var(--dsw-alias-border-l2)`），照抄；
+但它意味着「高分屏上这页比低分屏更轻」，是刻意的。
+
+**开关的整数行程**：38×22 换成 36×20、`box-sizing: border-box`、`padding: 2px`
+之后，内槽 36 − 2×2 = 32，knob 16，行程正好 `32 − 16 = 16px`，读成一个
+`--fh-switch-travel` 变量。`box-sizing` 必须**显式**写：宿主没有全局
+`box-sizing` 重置（整仓只有 `60-caret.css` 一处 `content-box`），不写就变成
+36 + 2×2 = 40 宽。
+
+**顺手消灭的一个对比度隐患**：分段按钮的选中态原来是「品牌色实心 + 白字」，
+而暗色品牌色 `rgb(127,150,210)` 配白字只有 2.92:1 —— 当时只能绕道用
+`--dsw-alias-label-primary-foreground` 兜。改成 claude 的浅色块
+（暗色 layer-3 / 亮色 overlay + 1px 投影）之后，文字是 label-primary，
+对比度由宿主调色板保证，**白字方案连同它的问题一起消失**。
+
+### 15.6 窗口 chrome：三条锚点纪律
+
+这一版新增 `58-chrome.css`，管三样宿主自己的东西：会话头右上的 dock 开关、
+侧栏底部的账号行、以及账号行 portal 出来的菜单。
+
+**纪律一：`data-slot` 具名槽是跨版本契约。**
+宿主通过 `ctx.slots.inject()` 注册的槽（`settings.launcher`、
+`conversation.session.header.corner`、`conversation.input.permission` / `.model`）
+是插件契约的一部分，比哈希类名稳得多，也比 `[role=menu]` 这种泛语义准得多。
+新规则一律先找槽。
+
+**纪律二：绝不写哈希类名。**
+宿主 CSS module 的类名有两种哈希格式（`ET65mq_trigger` 这种「5 位前缀_」和
+`_itemIcon_4ub78_148` 这种「_名字_hash_序号」），跨版本必变。唯一例外是
+`[class*="_signedOutMenu"]` —— 那是宿主给未登录菜单留的语义化前缀，跨版本
+不变；其余一律走 `:nth-child(2)` / `:first-child:has(svg)` / `:has(kbd)`。
+
+用户名刻意取 `> span:nth-child(2)`（第二个**孩子**，不是第二个 span）：登录是
+`[span.avatar, span.label]`，未登录是 `[svg, span.label]`，折叠时 label 整个
+不渲染 —— 三种情况下「第 2 个孩子」要么是用户名、要么不存在，两头都不会误伤。
+刻意不用 `:last-child`：将来末尾追加角标就取错了。
+
+**纪律三：portal 到 body 的菜单靠 body 上的 `--dsw-*` 继承。**
+菜单不在侧栏里，不继承侧栏的任何上下文；颜色能跟随主题，全因为别名的
+`--dsw-*` 声明在 `body` 上（见 §2）。所以 H3 的颜色只写 token、不写死值。
+
+### 15.7 两个 CSS 陷阱
+
+**（一）`:has()` 不能嵌套。** Chrome 会把整条选择器判为无效 —— 不是忽略内层，
+是**整条规则不生效**。想表达「没有箭头时才补箭头」只能写成平行的两道：
+
+```css
+:not(:has(> svg:last-child)):not(:has(> :last-child svg))::after { … }
+```
+
+**（二）border 画的箭头在 200% DPI 下发毛。**
+用「两条边 + `rotate(45deg)`」拼出来的 chevron，在非整数缩放下会糊成一片。
+改成 SVG `mask-image` + `background: currentColor`：矢量抗锯齿，还能跟着
+文字色自动变。
+
+### 15.8 这一版没有做的事
+
+- **第二个停止键没搬**：`interruptible` 时工具行里的额外停止键仍在原位。
+  它只在「运行中且可继续」时出现，搬它要把 `_trailing > :not(:last-child)`
+  也绝对定位，收益低、状态组合多。
+- **滑块没有 claude 对照物**：claude 设置页 CSS 里 `type=range` 命中 0 次
+  （核查过它的产物），所以滑块只做与行网格对齐的微调，不动形状。
+- **设置页只改 CSS，没动 DOM**：`src/client.js` 里 `.fh-set-row` 的构造与全部
+  `fh-set-*` 类名一字未改。视觉重排全部落在 `40-settings.css`，这样
+  任何一条改动都可以单独回滚。
+
+---
+
+## 16. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -879,4 +1079,5 @@ probe range → 内容盒左上角，高度回落到 20px。
 | 0.7.2 | dock 标签标题不再被 hover/active 态 mask 白吃一截：装得下就完整显示 |
 | 0.8.0 | 会话头按钮抬进原生标题栏（纯 CSS + `env()`）、输入区独立成卡；两个开关 |
 | 0.9.0 | dock 标签不再被自己撑出的 9px 幻影溢出诱发宿主渐隐；平滑输入光标（自绘层 + 80ms 滑动 + 1s 步进闪烁）；一个新开关 |
+| 0.10.0 | 输入区按 claude 几何重排（工具行 28px 单行、+ 与发送键进卡面）；设置页去卡片化；窗口 chrome（dock 开关 / 侧栏账号行 / 账号菜单） |
 

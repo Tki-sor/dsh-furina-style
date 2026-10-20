@@ -1,0 +1,503 @@
+/* ============================================================================
+   dsh-furina-style — 58. 窗口 chrome（右上 dock 开关 / 侧栏账号区 / 账号菜单）
+   ----------------------------------------------------------------------------
+   这一层只做三件事，全部是「让宿主已有的控件换上芙宁娜的手感与比例」，不加
+   元素、不搬家、不抢宿主的事件：右上角那个 dock 开关按钮、侧栏底部的账号触
+   发行、以及点开账号行后 portal 到 body 的那张菜单。三者都按 claude 的实测
+   数值重新定比例（26→ 26 / 44→32 / 14→16），颜色全部走 --dsw-* 别名，所以
+   亮色、暗色、以及第三方皮肤接管时都自动跟随。
+
+   宿主真实 DOM（来自 app.asar 里的 AccountMenu.jsx / Menu primitive，不是猜的）：
+
+     ① 右上 dock 开关（ui-sidebar 注册进 conversation.session.header.corner）
+        div[data-slot="conversation.session.header.corner"]   ← display:contents
+          └ button                     ← 宿主「compact Button」，共用 ghost 类
+               └ svg 16x16
+
+     ② 侧栏账号触发（@deepseek-ai/dsh-client-ui-settings-account 的 AccountMenu）
+        div[data-slot="settings.launcher"]                    ← display:contents
+          └ div.ET65mq_root
+              └ span/Menu 外壳
+                  ├ button.ET65mq_trigger
+                  │    ├ span.ET65mq_avatar  [data-avatar-status]  ← 头像
+                  │    └ span.ET65mq_label                          ← 用户名
+                  └（菜单本体被 portal 走，见 ③）
+
+     ③ 账号菜单（ui-primitives 的 Menu，portal:true）
+        body
+          ├ div[aria-hidden][data-menu-backing]        ← macOS 才有，display:none
+          └ div[role="menu"]._surface_ri079_1._list_4ub78_7._portal_4ub78_41
+              ├ div[aria-hidden]._material_ri079_21    ← 真正画底色的那一层
+              └ div[role="presentation"]._viewport_4ub78_19
+                  └ div._itemWrap_4ub78_90
+                      └ button[role="menuitem"]
+                          ├ span._itemIcon_4ub78_148 > svg   ← 16px 图标
+                          ├ span._itemLabel_4ub78_190
+                          └ span._shortcut…> kbd             ← 只有「设置」有
+
+   为什么锚点这么选（这一层最重要的纪律）：
+     · `settings.launcher` 与 `conversation.session.header.corner` 是宿主
+       `ctx.slots.inject(...)` 注册的**具名槽**，属于跨版本契约；槽上的
+       data-slot 由框架写，不随构建哈希变化。
+     · 触发按钮和多处 ghost 按钮共享同一个 CSS-module 类（同一个类名会同时命
+       中页面上别处的按钮），所以只能先锚槽再取 button。
+     · 账号行的类名是 `ET65mq_trigger` 这种「哈希前缀_名字」格式，哈希每次发版
+       都会变；菜单原语的类名是 `_itemIcon_4ub78_148` 这种「_名字_哈希_序号」
+       格式，同样会变。**本文件不写任何哈希类名**；内部结构一律用
+       `:nth-child(2)` / `:first-child:has(svg)` / `:has(kbd)` 这样的结构关系
+       表达。唯一一处 class 子串是 H3 里的 `[class*="_signedOutMenu"]`，只匹配
+       语义名字段、不匹配哈希，理由写在那一节的注释里。
+     · 菜单那张卡是 portal 到 body 的，所以它不继承侧栏的任何上下文；颜色能跟
+       随主题，是因为 --dsw-* 别名声明在 `body` 上（见 00-tokens.css 的注释）。
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   H1. 右上 dock 开关按钮（conversation.session.header.corner）
+   ----------------------------------------------------------------------------
+   宿主给的是 28x28 / radius 8 / 透明底 / ghost 文字色的「compact Button」，
+   和旁边「更多操作」共用一个类。我们只改比例与反馈，不动位置 —— 位置由
+   16-band.css 的 B1 管（标题栏抬升），两层职责不重叠。
+
+   26x26 是 claude 侧边栏折叠按钮的实测尺寸：比 28 小一号，视觉上就退成
+   「附属控件」，不会和「更多操作」抢注意力。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.session.header.corner"]
+  button {
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    transform var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+/* 图标跟着盒子缩：宿主这个小按钮里只有一枚 16px svg，写死尺寸避免 flex 拉伸 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.session.header.corner"]
+  button
+  svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* 8% 水膜而不是宿主的 interactive-bg-hover：后者在暗色下是 8%、亮色下只有
+   6%，两档不一致；这里统一按「label-primary 的 8%」算，亮暗视觉重量相同。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.session.header.corner"]
+  button:hover {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 按下缩到 0.97：和 20-motion.css 的 M6 同一套手感，但 M6 只挂了 button，
+   这颗按钮虽然是 button 也会被 M6 命中 —— 这里写在同一层只是保证 58 这一层
+   单独生效时（例如 motion="reduced" 关掉了 M6 的 transition）仍然有反馈。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="conversation.session.header.corner"]
+  button:active {
+  transform: scale(var(--fh-scale-press, 0.97));
+}
+
+/* ----------------------------------------------------------------------------
+   H2. 侧栏底部账号触发行（settings.launcher）
+   ----------------------------------------------------------------------------
+   宿主：height 44 / padding 6 / radius 12 / gap 8 / 透明底 / 14px 文字，
+   头像 24x24。claude 的账号行是 32 高、8px 内边距、6px 圆角、13px 文字、
+   18px 头像 —— 一行「列表项」而不是一个「卡片按钮」。
+
+   几何只作用在 `:not([data-collapsed="true"])`：折叠侧栏时宿主自己把触发
+   器收成 36x36 的方形（`.ET65mq_trigger[data-collapsed=true]`），那套比例是
+   对的，硬压成 32 高会把头像和方框挤变形。
+   -------------------------------------------------------------------------- */
+/* 箭头图形只写一份：mask-image 用同一个 data URI，暗色/亮色都靠 currentColor
+   取色，不需要第二套资源。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] {
+  --fh-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"]) {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  /* transform 必须在列表里：M6 的 `button:active{transform:scale(.97)}` 命中
+     这颗按钮，而我们这条高特异性规则会把 M6 的 transition 列表整条覆盖掉，
+     漏写 transform 就会看到按下时瞬间跳到缩小态（仓库审计 #17 同一个坑）。
+     排最后：别抢背景色的手感。 */
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    transform var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+/* hover 与「菜单已展开」共用一层水膜：展开态如果没底色，按钮和弹出的菜单卡
+   之间会断成两块，看不出「这张卡属于这行」。aria-expanded 由宿主的
+   AccountMenu 写在触发按钮上（`"aria-expanded": open`），是语义属性。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"]):hover,
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+}
+
+/* 头像：宿主是 24x24 的 span（内含 img 或首字母兜底）。
+   结构上「第一个 span 且不是唯一的那个 span」就是头像 —— 未登录时第一个孩子
+   直接是省略号 svg（没有 span），登录后才是 span 头像，所以这条只会命中头像。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"])
+  > span:first-child {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"])
+  > span:first-child
+  img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* 用户名：取 `> span:nth-child(2)`（第二个**孩子**，不是第二个 span）。
+   宿主 AccountMenu 的 children 顺序是固定的：
+     登录   [span.avatar,       span.label]
+     未登录 [svg 省略号,        span.label]
+     折叠   [span.avatar]                    （label 整个不渲染）
+   三种情况下「第 2 个孩子」要么是用户名、要么不存在，两头都不会误伤。
+   **刻意不用** `> span:last-child`：宿主将来若在末尾追加箭头/角标，最后那个
+   孩子就不是文字了；用序号位反而更稳。13px/18px 与 claude 一致。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"])
+  > span:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧小箭头。
+   先说清一个版本差异：本机 app.asar 里 AccountMenu.jsx 的 children 只有
+   `[span.avatar, span.label]`（未登录是 `[svg 省略号, span.label]`），**没有**
+   chevron；但 live 探针报告看到过一枚。为了让两种宿主都只出现一个箭头，
+   伪元素加了两道「末尾没有自带图形」的守卫：
+     :not(:has(> svg:last-child))    —— 末尾不是裸 svg
+     :not(:has(> :last-child svg))   —— 末尾孩子里也没有 svg 后代
+   宿主自带箭头时至少一条为假，我们的伪元素不出现；宿主没有时才补。
+   注意这里刻意写成两个平行的 :has()，**不能**嵌套 —— CSS 规范禁止
+   `:has()` 出现在 `:has()` 内，Chromium 会把整条选择器判为无效。
+
+   用 SVG mask 而不是 border 旋转：mask 的箭头是真正的图标轮廓（1.5px 描边、
+   圆角端点），border 画出来是直角梯形，DPI 200% 下明显发毛。
+   14x14 的盒子 + 12px 的图形，和 claude 的 chevron 尺寸一致。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"]:not([data-collapsed="true"]):not(
+    :has(> svg:last-child)
+  ):not(:has(> :last-child svg))::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  background-color: currentColor;
+  -webkit-mask-image: var(--fh-chevron-down);
+  mask-image: var(--fh-chevron-down);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 12px 12px;
+  mask-size: 12px 12px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transition: transform var(--fh-dur-surface, 180ms) var(--fh-ease-settle, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* 展开时翻 180°：箭头朝上表示「这张卡向上弹」。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-slot="settings.launcher"]
+  button[aria-haspopup="menu"][aria-expanded="true"]:not(
+    :has(> svg:last-child)
+  ):not(:has(> :last-child svg))::after {
+  transform: rotate(180deg);
+}
+
+/* ----------------------------------------------------------------------------
+   H3. 账号菜单浮层（body > [role="menu"]）
+   ----------------------------------------------------------------------------
+   宿主这张卡：radius 16（--dsw-radius-lg）、padding 4、border 0、
+   box-shadow 走 --dsw-elevation-prominent（含一条 0.5px 描边），底色由子级
+   `._material_ri079_21` 画（background: var(--dsw-menu-surface-fill)，
+   backdrop-filter: var(--dsw-menu-backdrop-filter) === blur(40px) saturate(150%)）。
+
+   我们不碰 material 那一层，只改它外面这层壳：material 用 `border-radius:
+   inherit` 和 `inset:0` 跟着壳走，所以改壳的圆角和内边距，底色和毛玻璃会
+   自己跟着变圆、变窄。这是「少改一层」的关键——直接写 ._material_ 反而会
+   因为它 inset:0 而盖住新加的 1px 边框。
+
+   为什么不像 claude-style 那样补一条 12px 的隐形 hover 桥：那张卡是**点击**
+   打开的（宿主 AccountMenu 的 onClick 切 open，Menu 的 closeOnPointerLeave
+   默认 false，关闭只由「指针在菜单外按下」触发），指针横穿 4px 间隙不会被判
+   成离开。桥只在 hover-open 的交互里才有必要。
+
+   收窄命中的两个判别式（命中任一即算账号菜单）：
+     ① `:has([role="menuitem"][aria-keyshortcuts])`
+        设置项是宿主唯一带 shortcut 的项（`{id:"settings", …, shortcut:
+        settingsShortcut}`，只在「设置」命令确实绑定了键位时才传）。桌面端
+        默认绑 Mod+,，所以正常情况这条恒真。
+     ② `[class*="_signedOutMenu"]`
+        **兜底**，只覆盖「未登录」那一种菜单。类名全称是
+        `ET65mq_signedOutMenu`，形如 `<哈希>_<语义名>`；哈希每次发版都变，
+        但 `_signedOutMenu` 这一段是宿主 sourcemap 里的语义名字，稳定。这里
+        只匹配名字段、不匹配哈希 —— 这是本文件唯一一处 class 子串，写在这里
+        是因为未登录菜单没有快捷键项，① 会漏掉它。
+
+   为什么不用 `[data-menu-material="translucent"]`：它挂在菜单表面组件上，
+   所有 ui-primitives 菜单（含 ui-schedule 的 TaskMenu、斜杠菜单）都带，
+   区分不了，所以只作为结构识别用、不进选择器。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  ) {
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  /* 两层阴影：近处一层贴边、远处一层扩散。暗色下宿主自己也只有一层柔光，
+     在深色插画上完全「贴不住」，所以暗色那一组另外加重（见下面 dark 段）。 */
+  box-shadow:
+    0 8px 30px 0 color-mix(in srgb, var(--fh-water-ink, #1d2539) 12%, transparent),
+    0 2px 8px 0 color-mix(in srgb, var(--fh-water-ink, #1d2539) 6%, transparent);
+  /* 菜单向上弹（宿主 AccountMenu 传 side:"top"），所以从底边左侧长出来；
+     transform-origin 只在入场动画那 250ms 里起作用。 */
+  transform-origin: bottom left;
+  /* clip 而不是 visible：material 那一层是 `inset:0 + border-radius:inherit`,
+     被我们的 1px 边框推到内边距盒上；不裁的话它的 12px 圆角和我们外框的 12px
+     会在对角线上错开 1px，露出一条本不该有的描边。overflow:hidden 让裁切线
+     正好落在内边框上，圆角严丝合缝。账号菜单没有子菜单，不会裁到东西。 */
+  overflow: hidden;
+}
+
+/* 暗色下阴影加重：亮色阴影用蓝墨（#1d2539）着色，在深底上几乎看不见；
+   改纯黑 + 更高 alpha，卡才能从 #101624 的画布里浮起来。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body[data-ds-dark-theme]
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  ) {
+  box-shadow:
+    0 8px 30px 0 rgb(0 0 0 / 0.5),
+    0 2px 8px 0 rgb(0 0 0 / 0.3);
+}
+
+/* ----------------------------------------------------------------------------
+   H4. 菜单项
+   ----------------------------------------------------------------------------
+   宿主：min-height 34 / padding 6px 8px / radius 12 / gap 6 / 13px·20px /
+   hover = --dsw-alias-interactive-bg-hover。
+   claude：min-height 32 / padding 2px 7px / radius 6 / gap 8 / 13px·20px /
+   hover = label-primary 的 8%。
+
+   为什么要 !important：宿主的菜单原语把样式以 `<style data-plugin-css>` 的
+   形式在运行时 append 到 head（谁先谁后不由我们决定），而它的 hover 规则
+   带 `:not(:disabled)`；`!important` 让结果与注入顺序无关。同理用于几何值 ——
+   同一张菜单还可能被 ui-schedule 的本地副本规则命中。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"] {
+  box-sizing: border-box;
+  gap: 8px !important;
+  min-height: 32px !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  font-weight: 400 !important;
+  color: var(--dsw-alias-label-primary) !important;
+  /* 同样必须带 transform（见 H2 的说明）：菜单项是 button，M6 的 :active
+     scale 会命中它。 */
+  transition:
+    background-color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    color var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease),
+    transform var(--fh-dur-feedback, 120ms) var(--fh-ease-standard, ease);
+}
+
+/* hover / 键盘焦点：同一层 8% 水膜（宿主 focus-visible 只给背景不给 outline，
+   我们保持一致，并额外把文字提亮一档）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"]:hover:not(:disabled),
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"]:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent) !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+/* 图标：结构定位 `> span:first-child:has(> svg)`，不数位置、不用类名。
+   为什么不用 `> span:first-child:not(:last-child)`：没有图标的项里
+   first-child 就是文字 span，如果它后面还跟着快捷键 span，这个写法会误判。
+   `:has(> svg)` 只认「装着 svg 的那个 span」，而快捷键 span 里是 kbd、
+   勾选是直接挂在 button 下的 svg，都不会命中。
+   16x16 + label-secondary：宿主是 14x14，claude 的菜单图标是 16。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"]
+  > span:first-child:has(svg) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--dsw-alias-label-secondary) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"]
+  > span:first-child:has(svg)
+  svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* 文字始终占满剩余宽度，快捷键/勾选贴右；宿主已经这么写，这里只补一句
+   防止 32px 行高下的纵向抖动（line-height 20 + min-height 32 → 6px 上下留白）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  [role="menuitem"]
+  > span:has(kbd) {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* ----------------------------------------------------------------------------
+   H5. 入场动画 + 减弱动效
+   ----------------------------------------------------------------------------
+   宿主菜单是「挂载即出现」，没有任何过渡。这里补一次从锚点长出来的 250ms
+   缩放：scale(.97) → 1 + opacity 0 → 1，曲线用 --fh-ease-settle
+   （cubic-bezier(.22,1,.36,1)），和 20-motion.css 里弹层用的是同一条曲线。
+
+   两道减弱动效：
+     ① 20-motion.css 的 M5 会给所有 [role="menu"] 挂 fh-surface-in，并且给
+        它的直接子级挂 stagger。账号菜单的子级是「材质层 + viewport」，让它们
+        各自飞一次会看到卡片内部先错位再合拢 —— 所以在这里把子级动画清掉，
+        只保留整卡一次性入场。
+     ② 系统 reduced / 插件 motion="reduced" 时彻底不播。
+   -------------------------------------------------------------------------- */
+@keyframes fh-dropdown-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  ) {
+  animation: fh-dropdown-in 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  )
+  > * {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 和 20-motion.css 的 M11 同一条纪律：用户在插件里显式选了「始终动效」
+     （motion="on"）时不压；系统偏好只对 auto / reduced 生效。 */
+  html[data-dsh-furina][data-dsh-furina-layout="on"]:not([data-dsh-furina-motion="on"])
+    body
+    > [role="menu"]:is(
+      :has([role="menuitem"][aria-keyshortcuts]),
+      [class*="_signedOutMenu"]
+    ) {
+    animation: none;
+  }
+
+  html[data-dsh-furina][data-dsh-furina-layout="on"]:not([data-dsh-furina-motion="on"])
+    [data-slot="settings.launcher"]
+    button[aria-haspopup="menu"]::after {
+    transition: none;
+  }
+}
+
+/* 插件自己的动效开关（设置里的「减弱动效」）优先级高于系统设置：
+   属性门控写在这里，prefers-reduced-motion 只是兜底。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-motion="reduced"]
+  body
+  > [role="menu"]:is(
+    :has([role="menuitem"][aria-keyshortcuts]),
+    [class*="_signedOutMenu"]
+  ) {
+  animation: none;
+}
