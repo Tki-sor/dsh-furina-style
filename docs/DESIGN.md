@@ -1203,7 +1203,258 @@ claude 对 banner 与复制按钮 **0 条规则**。
 
 ---
 
-## 17. 版本之间
+## 17. 0.12.0：宿主只设计了四级标题，我们补完另外两级
+
+### 17.1 症状：一段文档读到 h5 就失去了层级
+
+宿主自己渲染出来的标题阶梯是这样的（隔离实例，CDP 实测 computed style）：
+
+```
+h1  21px / 30px  w700
+h2  19px / 28px  w700
+h3  18px / 26px  w700
+h4  14px / 24px  w600
+h5  14px / 24px  w600
+h6  14px / 24px  w600
+```
+
+前三级挤在 3px 以内；后三级**完全塌平**，h5 和 h6 在屏幕上没有任何区别。
+对一段用 `#####` 划小节的文档来说，读到第五级时层级就消失了 —— 读者只能靠
+上下文猜「这一行是另一个小节的开头」。
+
+这不是渲染 bug，是宿主只设计了四级：h1/h2/h3 各有自己的 `font` 简写 token，
+h4 用「正文字号 + 600 字重」，h5/h6 直接复用 `--dsw-font-markdown-base-strong`
+（也就是 h4 的那一条）。
+
+### 17.2 根因：能改的地方和想改的地方不是同一层
+
+第一反应是覆写 `--dsw-font-markdown-h2` 之类的 token。先得确认两件事：
+token 谁消费的、以及 token 的默认值声明在哪。
+
+**消费方是宿主元素规则**，逐字是：
+
+```css
+._markdown_1ypvv_5 h1 { font: var(--dsw-font-markdown-h1); margin: 32px 0 16px; }
+._markdown_1ypvv_5 h2 { font: var(--dsw-font-markdown-h2); margin: 32px 0 16px; }
+._markdown_1ypvv_5 h3 { font: var(--dsw-font-markdown-h3); margin: 32px 0 16px; }
+._markdown_1ypvv_5 h4 { font: var(--dsw-font-markdown-h4); margin: 16px 0; }
+._markdown_1ypvv_5 :where(h5, h6) { font: var(--dsw-font-markdown-base-strong); margin: 16px 0; }
+```
+
+所以我们**不需要抢类名**：覆写 token，宿主的元素规则会替我们消费。这比写
+`h2 { font-size: 18px }` 干净 —— 行高、字重、字体族跟着一条 token 一起走，
+不会出现「字号变了行高没变」的错位。
+
+**默认值声明在 `body{}` 里**，不是 `html{}`：
+
+```css
+--dsw-font-markdown-h2: 700 calc(19px + var(--dsh-content-font-delta))
+                        / calc(28px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+--dsw-font-markdown-h3: 700 calc(18px + var(--dsh-content-font-delta))
+                        / calc(26px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+--dsw-font-markdown-h4: 600 var(--dsh-content-font-size, 14px) / calc(24px + delta);
+--dsw-font-markdown-base-strong: 600 var(--dsh-content-font-size, 14px) / calc(24px + delta);
+```
+
+这一点直接决定了覆写的位置：**必须写在 `body` 上**。写 `html { --dsw-…: … }`
+只是给 html 加了条继承值，而元素上的声明（`body{}`）赢过继承值，一切照旧。
+00-tokens.css 第 1 节为同一件事踩过一次，注释里记着。
+
+### 17.3 实测：字号是内联写在 `body` 上的
+
+还有一个更隐蔽的前提。宿主把用户设置里的字号写成**内联样式**：
+
+```js
+for (const [role, name] of Object.entries(FONT_SIZE_VARIABLES))
+  body.style.setProperty(name, `${snapshot.fontSizes[role]}px`);
+```
+
+`FONT_SIZE_SPECS` 里三档是 text 14（10–22）、code 11（10–16）、terminal 13（10–20）。
+
+内联样式的优先级高于任何 CSS 选择器，这意味着：
+
+- **覆写 `--dsh-content-font-size` 无效** —— 宿主在 html 上那条 `!important` 也许
+  能赢，但那是跟用户设置正面打架；
+- 唯一能接的接口是宿主自己派生的 **delta**：
+  `--dsh-content-font-delta: calc(var(--dsh-content-font-size) - 14px)`。
+
+所以本文件的纪律是：**每一个尺寸都写成 `calc(Npx + var(--dsh-content-font-delta, 0px))`**。
+写死 px 的后果是用户把正文字号调大，标题纹丝不动，正文和标题的相对层级崩掉。
+
+实测这条纪律成立：把 `--dsh-content-font-size` 临时调到 18px（delta = +4px），
+
+```
+h2   18px/26px → 22px/30px
+h3   16px/24px → 20px/28px
+行内代码 13px → 17px
+```
+
+整条阶梯按同一个 delta 一起长。
+
+### 17.4 修法一：阶梯 21 / 18 / 16 / 14（T1）
+
+h2 降 1px，h3 降 2px：
+
+```css
+html[data-dsh-furina][data-dsh-furina-layout="on"] body {
+  --dsw-font-markdown-h2: 700 calc(18px + var(--dsh-content-font-delta, 0px)) /
+    calc(26px + var(--dsh-content-font-delta, 0px)) var(--dsw-font-family);
+  --dsw-font-markdown-h3: 700 calc(16px + var(--dsh-content-font-delta, 0px)) /
+    calc(24px + var(--dsh-content-font-delta, 0px)) var(--dsw-font-family);
+}
+```
+
+行高同步收紧（28→26、26→24），保持行盒比例和正文一致，而不是「字号变小、
+行高还留着原来的数」。
+
+有意思的是 claude-style 也做了同一件事，而且只降 1px：它的 h2 是
+`700 calc(18px + delta)/calc(26px + delta)`、h3 是 `calc(16px + delta)/calc(24px + delta)`
+—— 数完全一样。考虑过要不要避开这个巧合，最后决定不避：宿主原来的
+19/18 确实太挤，而 21/18/16 是让 h2 与 h3 各有 3px 与 2px 落差的自然结果。
+
+### 17.5 修法二：h5/h6 没有 token，只能写元素规则（T2）
+
+`--dsw-font-markdown-base-strong` **同时被 `strong` 用** —— 覆写它会把正文里
+所有加粗一起变小，这个代价不能接受。所以这两级只能走元素规则。
+
+方向也要反过来：不往上加字号（小标题比正文还响就本末倒置了），而是往下收：
+
+| 级别 | 字号/行高 | 字重 | 字距 | 颜色 |
+| --- | --- | --- | --- | --- |
+| h5 | 13 / 22 | 600 | 0.02em | label-secondary |
+| h6 | 12 / 20 | 600 | 0.04em | label-tertiary |
+
+字距是必须的：小字号中英混排时，中文方块字与拉丁字母的字面宽度差得更多，
+不加字距就挤成一条。
+
+### 17.6 修法三：间距从 em 换成一根显式标尺（T3）
+
+0.12.0 之前这里只有一行 `margin-top: 1.35em`。em 的毛病是**跟着标题自己的
+字号走**：
+
+```
+h1  21px × 1.35 = 28.35px
+h3  18px × 1.35 = 24.30px
+```
+
+只差 4px。视觉上「大小标题一样重」—— 层级刚在字号上修好，间距又把它抹平一次。
+
+改成显式标尺，步长 4 4 4 2：
+
+| 级别 | margin-top | margin-bottom |
+| --- | --- | --- |
+| h1 | 30 | 14 |
+| h2 | 26 | 12 |
+| h3 | 22 | 10 |
+| h4 | 18 | 8 |
+| h5 / h6 | 16 | 6 |
+
+下边距反而比宿主的 16px 小，因为宿主给的下边距会和下一段自己的
+`margin-top: 16px` 叠加，视觉上是两份留白相加。再补一条收口规则：
+
+```css
+:is(h1..h6) + :is(p, ul, ol, pre, table, blockquote) { margin-top: calc(6px + delta); }
+```
+
+免得标题后面跟一个列表或代码块时，那一块自己又顶出 16px。
+
+实测（注入合成节点到真实 markdown 容器）：
+
+```
+H2 mt26 mb12   P(after head) mt6    ← 收口规则生效
+H3 mt22 mb10   UL(x)         mt6    ← 同上
+P  mt12 mb12   P(plain2)     mb0    ← 宿主 :last-child !important 仍在管
+P(first) mt0                        ← 宿主 :first-child !important 仍在管
+```
+
+### 17.7 修法四：行内代码的分数像素（T4）
+
+宿主给行内 code 的是 `font-size: .875em !important`。14px 正文里算出
+**12.25px** —— 分数字号在中英混排里会落到半个像素上，笔画边缘发灰。
+
+顺带发现插件里原来有一条 `font-size: 0.92em`（50-details.css D1）**从来没生效**：
+它没有 `!important`，被宿主那条压得干干净净；实测的 12.25px 全部来自宿主。
+这是一条死声明，0.12.0 删掉。
+
+改成 `calc(1em - 1px)`（= 13px）：
+
+```css
+:not(pre) > code { font-size: calc(1em - 1px) !important; }
+```
+
+台阶回到整数，且只比正文小 7%，夹在中文句子中间不会「跳一下」。
+
+两个必须注意的点：
+
+1. **必须 `!important`**，因为宿主那条也是 `!important`。特异性
+   (0,4,2) 对 (0,1,2)，字面上是我们高，但 `!important` 声明之间的比较不看
+   特异性之外的东西 —— 实际上两条都是 important 时，特异性高的赢，
+   所以严格说这条 `!important` 是为了跟宿主处在同一个比较层级。
+2. **标题内的行内代码要兜回来**。宿主让标题里的 code 继承标题字号
+   （`:where(h1..h6) code { font: inherit }`），我们那条 `!important` 会把它
+   一起盖掉，所以补一条 `:is(h1..h6) > code { font-size: 1em !important }`。
+
+实测：
+
+```
+inlineCode 13px/19px     （原来 12.25px/19px）
+h3 > code  16px/19px     （继承标题字号，未被压成 15px）
+pre        14px/24px     （不动 —— 代码块字号由用户设置里 code-font-size 管）
+```
+
+### 17.8 修法五：两条断行属性（T5）
+
+纯排版，不动任何尺寸：
+
+- `p / li / blockquote` 用 `text-wrap: pretty` —— 浏览器为了避免段末只剩
+  一两个字而提前换行。中文没有空格，孤字尤其难看。
+- `h1–h4` 用 `text-wrap: balance` —— 多行标题的行长被均分。
+
+两条都是渐进增强：不认识就整条忽略，退回原来的断行。实测 computed style
+`text-wrap: pretty` / `balance` 均已生效（Chromium 117+）。
+
+### 17.9 退役的三条旧声明，与这一版没有做的事
+
+排版第一次有了统一去处，就该把散在外面的收掉：
+
+| 位置 | 旧声明 | 退役原因 |
+| --- | --- | --- |
+| 50-details.css D1 | `font-size: 0.92em` | 死声明，被宿主 `.875em !important` 完全压掉 |
+| 50-details.css D5 | `margin-top: 1.35em` 整节 | 迁到 T3；em 让大小标题间距只差 4px |
+| 10-layout.css L9 | `:is(h1,h2,h3){letter-spacing:0.01em}` | 迁到 T3，与阶梯同文件 |
+
+没有做的三件事：
+
+- **换字体族。** claude-style 的排版优势里有一半来自自托管的四个字体文件
+  （Anthropic Sans Web Text / Inter / Noto Serif / JetBrains Mono）。那是一次
+  几 MB 的体积和一次加载竞态，换不来「层级」。
+- **调正文字号。** 14px 是用户在设置里定的（10–22 可调）。皮肤去改它等于跟
+  用户的设置打架，而且用户一调大就再打一次。
+- **照抄 claude 的 markdown 结构规则。** 它那一整套锚在
+  `[data-dsh-claude-part~=markdown]` 上 —— 那是它自己 JS 注入的属性，宿主
+  asar 里 `part` 属性 0 命中（16.1 已记录）。它的 `p { margin: 12px 0 }`
+  我们本来就有，h2/h3 各降 1px 我们也做了，剩下的差异全在字体族。
+
+### 17.10 验收用的三条探针
+
+排版这种改动肉眼很难判断「是不是真生效了」，所以验收全部走 CDP 探针
+（隔离实例 `http://127.0.0.1:5177`，headless Edge `:9333`）：
+
+1. **阶梯探针**：往真实 `._markdown_1ypvv_5` 里注入 h1–h6/p/li/blockquote，
+   读 computed `fontSize/lineHeight/fontWeight/letterSpacing/margin/color/textWrap`。
+   期望值见 17.1 与 17.6 的两张表。
+2. **行内代码探针**：注入 `<p>text <code>`、`<pre><code>`、`<h3>head <code>`，
+   期望 13 / 14 / 16。
+3. **delta 探针**：`document.body.style.setProperty('--dsh-content-font-size','18px')`
+   后重新量阶梯，期望 h2 22/30、h3 20/28、行内 code 17px；量完必须
+   `removeProperty` 复原。
+
+三条都通过之后才动文档和版本号 —— 否则改的是「以为生效了」的 CSS。
+
+---
+
+## 18. 版本之间
+
 
 | 版本 | 主题 |
 | --- | --- |
@@ -1220,4 +1471,5 @@ claude 对 banner 与复制按钮 **0 条规则**。
 | 0.9.0 | dock 标签不再被自己撑出的 9px 幻影溢出诱发宿主渐隐；平滑输入光标（自绘层 + 80ms 滑动 + 1s 步进闪烁）；一个新开关 |
 | 0.10.0 | 输入区按 claude 几何重排（工具行 28px 单行、+ 与发送键进卡面）；设置页去卡片化；窗口 chrome（dock 开关 / 侧栏账号行 / 账号菜单） |
 | 0.11.0 | 正文容器补发丝外框（代码块 / 宽表格 / 我发出的附件卡）；焦点环收窄到真焦点语义，并跟住宿主的指针模态契约 |
+| 0.12.0 | 排版轴：标题阶梯 21/18/16/14/13/12（宿主后两级塌平）、显式间距标尺、行内代码回到整数像素、断行质量 |
 

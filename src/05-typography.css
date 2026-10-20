@@ -1,0 +1,158 @@
+/* ============================================================================
+   05. 排版轴：字号阶梯与纵向节奏
+   ----------------------------------------------------------------------------
+   0.12.0 新建。此前插件的字号声明散在两处，而且都是「绕着走」：
+     · 10-layout 的 L9 只给 h1–h3 加了一点点字距，字号一条没动；
+     · 50-details 的 D5 只调标题之间的间距，注释里写着「不动宿主定义的
+       字号」。
+   这一节把「层级」收拢到一处，并且第一次动字号本身。
+
+   为什么值得动：宿主自己的标题阶梯是 21 / 19 / 18 / 14 / 14 / 14 ——
+   h1 h2 h3 挤在 3px 以内，h4 h5 h6 完全塌平成「正文加粗」，第五级标题与
+   第六级标题在屏幕上没有任何区别。这不是审美问题，是**层级失效**：文档里
+   写了 h5 也读不出它比 h4 低一级。
+
+   三条纪律（前两条是本文件能不能生效的前提）：
+     1) 尺寸一律写成 calc(Npx + var(--dsh-content-font-delta))。宿主把用户的
+        字号设置以**内联样式**写在 body 上（body.style.setProperty），CSS 覆写
+        --dsh-content-font-size 会被内联样式直接压掉；唯一能接的接口是宿主
+        自己用同一条 delta 派生的那些 calc()。写死 px 的后果是用户在设置里
+        把正文字号调大，标题却不动。
+     2) token 覆写必须声明在 body 上。宿主把 --dsw-font-markdown-* 的默认值
+        写在 body{} 里，元素上的声明赢过 html 继承下来的值（同 00-tokens.css
+        第 1 节那段注释）。
+     3) 只改「宿主没做设计」的部分。h1 与 h4 宿主给的是 21/30 与 14/24，
+        它们是合理的，不动。
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   T1. 阶梯：h2 降 1px、h3 降 2px，把 21→19→18→14 修成 21→18→16→14
+   ---------------------------------------------------------------------------
+   宿主只给 h1–h4 各一条 font 简写 token，所以这里覆写的是**宿主自己的
+   接口**，元素规则仍然由宿主的 ._markdown h2{font:var(--dsw-font-markdown-h2)}
+   去消费 —— 我们不去抢 ._markdown 的类名，也不重复声明 font-size。
+   行高同步收紧（28→26、26→24），让标题的行盒比例和正文（24/14）对齐，
+   而不是字号变小、行高还留着原来的数。
+
+   h5 / h6 没有属于自己的 token（宿主让它们复用 --dsw-font-markdown-base-strong，
+   而那个 token 同时被 strong 用，覆写它会把正文加粗也一起改小），所以这两级
+   只能用元素规则，见 T2。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] body {
+  --dsw-font-markdown-h2: 700 calc(18px + var(--dsh-content-font-delta, 0px)) /
+    calc(26px + var(--dsh-content-font-delta, 0px)) var(--dsw-font-family);
+  --dsw-font-markdown-h3: 700 calc(16px + var(--dsh-content-font-delta, 0px)) /
+    calc(24px + var(--dsh-content-font-delta, 0px)) var(--dsw-font-family);
+}
+
+/* ---------------------------------------------------------------------------
+   T2. h5 / h6：把塌掉的两级重新拉开
+   ---------------------------------------------------------------------------
+   宿主这两级都是 14/24/600，和 h4 一模一样。这里不往上加字号（那会让小标题
+   比正文还响），而是往下收：h5 走 13/22，h6 走 12/20 并换成三级文字色。
+   收字号的同时抬一点字距（0.02em / 0.04em），小字号中英混排才不会挤成一条。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h5 {
+  font-size: calc(13px + var(--dsh-content-font-delta, 0px));
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--dsw-alias-label-secondary, inherit);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h6 {
+  font-size: calc(12px + var(--dsh-content-font-delta, 0px));
+  line-height: calc(20px + var(--dsh-content-font-delta, 0px));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-tertiary, inherit);
+}
+
+/* ---------------------------------------------------------------------------
+   T3. 节奏：标题的上下留白改成显式的一根标尺
+   ---------------------------------------------------------------------------
+   0.12.0 之前这里是 50-details D5 的 margin-top: 1.35em —— 用 em 的结果是
+   间距跟着**标题自己的字号**走，于是 21px 的 h1 拿 28.35px、18px 的 h3 拿
+   24.3px，看起来「大小标题一样重」。改成显式标尺后，层级是：30 / 26 / 22 /
+   18 / 16，步长 4 4 4 2，每升一级就多一口气。
+
+   下边距反而收紧（16 → 14/12/10/8/6），因为宿主给的下边距和正文自身的
+   margin-top 会叠加：标题和紧跟的第一段之间，视觉上是两份留白相加。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h1 {
+  margin-top: calc(30px + var(--dsh-content-font-delta, 0px));
+  margin-bottom: calc(14px + var(--dsh-content-font-delta, 0px));
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h2 {
+  margin-top: calc(26px + var(--dsh-content-font-delta, 0px));
+  margin-bottom: calc(12px + var(--dsh-content-font-delta, 0px));
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h3 {
+  margin-top: calc(22px + var(--dsh-content-font-delta, 0px));
+  margin-bottom: calc(10px + var(--dsh-content-font-delta, 0px));
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] h4 {
+  margin-top: calc(18px + var(--dsh-content-font-delta, 0px));
+  margin-bottom: calc(8px + var(--dsh-content-font-delta, 0px));
+  letter-spacing: 0.01em;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :is(h5, h6) {
+  margin-top: calc(16px + var(--dsh-content-font-delta, 0px));
+  margin-bottom: calc(6px + var(--dsh-content-font-delta, 0px));
+}
+
+/* 宿主的 >*:first-child / :last-child 两条 !important 已经替我们清掉了首尾，
+   这里保留一条只为了「标题后面紧跟列表 / 代码块 / 表格」时的收口一致：
+   宿主给这些块的 margin-top 是 16px，标题已经自带下边距，叠起来太散。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"]
+  :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, pre, table, blockquote) {
+  margin-top: calc(6px + var(--dsh-content-font-delta, 0px));
+}
+
+/* ---------------------------------------------------------------------------
+   T4. 行内代码：把分数像素改成整数
+   ---------------------------------------------------------------------------
+   宿主给行内 code 的是 font-size: .875em !important —— 14px 正文里算出
+   12.25px 这种分数像素。分数字号在中英混排里会落到半个像素上，笔画边缘发灰。
+   这里改成 calc(1em - 1px)（= 13px），台阶是整数，且只比正文小 7%，
+   夹在中文句子中间不会「跳一下」。
+
+   必须带 !important：宿主那条也是 !important，谁的权重高谁赢，而我们这条
+   选择器 (0,4,2) 高于宿主的 (0,1,2)。
+   标题里的行内代码例外 —— 宿主让它继承标题字号（:where(h1..h6) code{font:inherit}），
+   我们这条 !important 会把它一起盖掉，所以补一条等价的 1em 兜回来。
+   ------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] :not(pre) > code {
+  font-size: calc(1em - 1px) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"]
+  :is(h1, h2, h3, h4, h5, h6) > code {
+  font-size: 1em !important;
+}
+
+/* ---------------------------------------------------------------------------
+   T5. 断行质量：中文段落的「孤字」与标题的「末行只有两个字」
+   ---------------------------------------------------------------------------
+   两条纯排版属性，不动任何尺寸：
+     · p / li / blockquote 用 text-wrap: pretty —— 浏览器会为了避免段末只剩
+       一两个字而在此前换行（对中文尤其明显，中文没有空格，孤字很难看）。
+     · h1–h4 用 text-wrap: balance —— 多行标题的行长会被均分，不会出现
+       第一行撑满、第二行孤零零两个字。
+   两条都是渐进增强：浏览器不认识就整条忽略，退回原来的断行。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"]
+  :is(p, li, blockquote) {
+  text-wrap: pretty;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"]
+  :is(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
