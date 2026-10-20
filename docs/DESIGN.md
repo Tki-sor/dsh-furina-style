@@ -1062,9 +1062,148 @@ gap: 12px 8px` + 文字块 `flex: 1 1 140px; padding-right: 48px`：宽度不够
   `fh-set-*` 类名一字未改。视觉重排全部落在 `40-settings.css`，这样
   任何一条改动都可以单独回滚。
 
+## 16. 0.11.0：三圈「宿主没画」的边界，与一圈「我们画多了」的环
+
+上一版把输入区按 claude 的几何重排完，这一版回到正文。起点是两份材料：一份是把
+`dsh-claude-style` 的成品 CSS 逐字拆出来（它的 `lib/client.js` 707,639 B 里藏着单个
+277,025 字符的模板串，剥出 1,161 条顶层规则），另一份是在隔离实例里用 CDP 量宿主的
+真实 DOM 与几何。
+
+先泼一盆冷水。
+
+### 16.1 120 个锚点，宿主里一个都没有
+
+claude-style 给每条规则都带根前缀 `body[data-dsh-claude-style]`（它自己 JS 注入的属性），
+结构定位全部走自造值 `data-dsh-claude-part~=xxx` —— 去重后 120 个。而在宿主 asar 里，
+`part` 属性**一次都没出现**；反过来，宿主真有的 `data-code-wrap` /
+`data-code-block-banner` / `data-code-block-content` / `data-message-attachments` /
+`data-row-key` / `data-conversation-header-corner`，它一个都没用。
+
+于是它那 29 条侧栏行规则、19 条附件规则、6 条表格规则、5 条会话头规则，**照抄等于写一堆
+永不生效的 CSS**。能直接被宿主吃到的只剩四类：`.md-code-block`（宿主全局类）、
+`[data-composer-card]` / `[data-input-scroll]`、`*` 上的滚动条伪元素，以及
+`:is(button, input, …):focus-visible`。
+
+这一版只做**锚点能站稳**的部分，于是问题变成：在宿主真有的锚点里，哪些是「宿主画了
+里面、没画外面」？
+
+### 16.2 焦点环：先收窄给谁，再跟上什么时候给
+
+`10-layout.css` 原来有一条无差别的：
+
+```css
+:focus-visible { outline: 2px solid …; outline-offset: 2px; }
+```
+
+两个问题。**一是给得太多**：宿主的可聚焦元素远多于按钮 —— 会话滚动区、代码块、消息容器
+都带 `tabindex`，鼠标点一下也亮一圈。**二是没跟上时机**：宿主自己有契约
+
+```css
+html[data-input-modality="pointer"] body :focus-visible:not(:read-write) { outline-color: transparent; }
+```
+
+也就是它按输入模态决定要不要画环（键盘来才画）。我们那条无差别规则特异性更高，把这条
+契约整个盖掉了。
+
+claude 的写法是角色清单：
+
+```css
+:is(button, input, textarea, select, [role="button"], [role="tab"], [role="treeitem"]):focus-visible {
+  outline: 2px solid rgba(20, 20, 19, .45); outline-offset: 1px;
+}
+```
+
+暗色 `outline-color: #faf9f599`。它**完全没判断 modality** —— `modality` 与
+`data-input-modality` 在它的产物里 0 命中，画不画全交给浏览器原生的
+`:focus-visible` 启发式。
+
+我们抄它的清单（另补 `summary` / `a[href]` / `[role="menuitem"]` / `[role="switch"]` /
+`[role="checkbox"]` / `[role="radio"]`），但**保留宿主契约**：再写一条，在
+`[data-input-modality="pointer"]` 时把环色置 `transparent`。
+
+这里踩了一个坑：第一版写成
+
+```css
+html[data-input-modality="pointer"] html[data-dsh-furina][data-dsh-furina-layout="on"] :is(…):focus-visible { … }
+```
+
+`data-input-modality` 与 `data-dsh-furina` **都挂在 `<html>` 上**，两个 `html` 之间的后代
+组合子永远不匹配 —— 规则静默失效。三条属性必须写进同一个复合选择器：
+
+```css
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-input-modality="pointer"]
+  :is(…):focus-visible:not(:read-write) { outline-color: transparent; }
+```
+
+### 16.3 代码块：只加外框，不动圆角、不加 overflow
+
+**症状**：代码块在浅画布上像一整块洞。宿主给代码块刷了两层底色（banner 更深、正文更深），
+却没给外边界；相邻两个代码块之间只剩 10px 间距，边界全靠颜色差自己找。
+
+**根因**：宿主 `.md-code-block` 只有 margin（非 compact `10px 0`，compact `4px 0`）和
+banner 的 `border-radius: 16px 16px 0 0`，没有 border。
+
+**修法**：0.5px 的 `border-l2` 90% + 一层 1px 落影（亮色 `rgb(16 24 44 / .06)`，
+暗色 `rgb(0 0 0 / .32)`）。两条刻意的「不做」：
+
+- **不改 radius**：圆角在 banner 上是 16/16/0/0，正文块是 0/0/16/16，统一改会把两者的
+  拼缝掀开；
+- **不加 `overflow: hidden`**：非 compact 时 banner 是 `position: sticky`（宿主自己写的），
+  裁切会把它锁死在框里、粘不住。
+
+另外要记住：banner 下面那条 0.5px 发丝线和复制按钮样式是 0.4.1 的 P8 自己写的 ——
+claude 对 banner 与复制按钮 **0 条规则**。
+
+### 16.4 表格：外框 + 圆角，但不夺走横向滚动
+
+**症状**：宽表格在会话里像一张没边界的纸，滚到边缘才看出「右边还有」。
+
+**根因**：宿主的 `_tableScroll` 是 `max-width: 100%; overflow-x: auto`，而 `table` 是
+`width: max-content; max-width: max-content` —— 内容天然超宽，靠容器横滚。`.md-table-wide`
+更极端：平时 `overflow-x: hidden` 且 `padding-bottom: var(--dsh-scrollbar-width, 5px)`，
+只在 `:hover` / `:focus-visible` 时切成 `scroll` 并把 padding 归零。
+
+**修法**：只加 `border: 0.5px` + `border-radius: var(--dsw-radius-md, 12px)` +
+`background-clip: padding-box`。**故意不写 `overflow: hidden`**：容器的 `overflow-x` 已经是
+`auto`/`scroll`，按 CSS 规则另一轴会自动 compute 成 `auto`，内容本来就被裁到圆角内侧；
+再补一条 `overflow: hidden` 会把 `.md-table-wide` 的 hover 切滚动整个废掉。
+`background-clip: padding-box` 是为了让圆角外的 0.5px 边框底下不露出表格自身的底色。
+
+也**没做**「还能横向滚」的渐隐：宿主已在 `.md-table-wide` 上预留
+`padding-bottom: var(--dsh-scrollbar-width, 5px)` 给滚动条，再叠一层 mask 会和它抢同一块空间。
+
+### 16.5 附件卡：一个稳定锚点，加一个显式声明的例外
+
+**症状**：自己发出去的文件卡（240px 宽、`min-height: 64px`）和正文一样贴着画布，
+没有「这是一张卡」的层次。
+
+**锚点**：容器 `[data-message-attachments]` 是宿主 JSX 里写死的 data-*（`UserContent` 在
+`attachments.length > 0` 时渲染），稳定；卡片本身只有 CSS module 类 `_fileCard`
+（产物前缀 `cJsG2q_`），没有 data-*。
+
+**修法**：容器 gap 8px；卡片 `border-radius: var(--dsw-radius-md, 12px)`、边框 90% 的
+`border-l2`、底色 `specific-input-major` 78%、hover 8% 品牌色水膜。外层用 `:where()` 把
+特异性压到 0，让任何后续覆写都能赢过我们。
+
+这是本仓库**第二类**被显式允许的锚点：CSS module 的「人写部分」子串（第一类是 0.7.1 起的
+`[class*="_stripTabs_"]` 那批）。注释里写明了它是哈希例外 —— 宿主换构建会自然失效，
+而不是误伤别的东西。
+
+### 16.6 这一版没有做的事
+
+- **输入区附件轨**（粘贴图片后那排缩略图）：宿主里只有 `srf2qa_rail` 这类哈希类，没有任何
+  data-* 可锚；
+- **表格「还能横向滚」的渐隐**：见 16.4，和宿主预留的 scrollbar padding 打架；
+- **会话头下渐隐纱**：claude 的纵向渐隐 `--dsh-claude-fade-stops` 可以借，但它的落点是
+  `[data-composer-seat]:before`（输入区上方）而不是会话头，照搬要重定 stop 位置；
+- **hero 容器 `max-width: 720px`**：宿主 `variant === "hero"` 只是 class 不是 data-*，
+  而且 `_hero` 的 padding 已经由我们的 framed 开关管着；
+- **侧栏行 28px**：宿主自己就是 `_sessionRow{height: 32px}`、14px 字、6px 圆角，
+  claude 的 28px 是它自己布局的产物，不必照搬。
+
 ---
 
-## 16. 版本之间
+## 17. 版本之间
 
 | 版本 | 主题 |
 | --- | --- |
@@ -1080,4 +1219,5 @@ gap: 12px 8px` + 文字块 `flex: 1 1 140px; padding-right: 48px`：宽度不够
 | 0.8.0 | 会话头按钮抬进原生标题栏（纯 CSS + `env()`）、输入区独立成卡；两个开关 |
 | 0.9.0 | dock 标签不再被自己撑出的 9px 幻影溢出诱发宿主渐隐；平滑输入光标（自绘层 + 80ms 滑动 + 1s 步进闪烁）；一个新开关 |
 | 0.10.0 | 输入区按 claude 几何重排（工具行 28px 单行、+ 与发送键进卡面）；设置页去卡片化；窗口 chrome（dock 开关 / 侧栏账号行 / 账号菜单） |
+| 0.11.0 | 正文容器补发丝外框（代码块 / 宽表格 / 我发出的附件卡）；焦点环收窄到真焦点语义，并跟住宿主的指针模态契约 |
 

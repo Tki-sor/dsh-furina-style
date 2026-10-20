@@ -284,11 +284,29 @@ html[data-dsh-furina] body[data-ds-dark-theme] ::selection {
 }
 
 /* 焦点环走宿主契约（我们已在 tokens 里把 --dsw-focus-ring-color 设成品牌色；
-   宿主默认是 transparent，所以必须显式给值）。 */
-html[data-dsh-furina][data-dsh-furina-layout="on"] :focus-visible {
+   宿主默认是 transparent，所以必须显式给值）。
+
+   ⚠️ 两条限定，缺一条就会和宿主打架（0.11.0 修）：
+   1) 只给「真有焦点语义」的角色。宿主的可聚焦元素远比按钮多（滚动区、
+      代码块、消息容器全都 tabindex=0 或 programmatic focus），无差别给
+      :focus-visible 会让它们在鼠标点击后也亮一圈。
+   2) 跟宿主的 modality 契约。宿主自己的规则是
+      `html[data-input-modality="pointer"] body :focus-visible:not(:read-write)`
+      → 环色透明（指针操作不显示焦点环）。我们原来没跟，于是鼠标点一下
+      按钮会弹出一个键盘才该有的环。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  :is(button, input, textarea, select, summary, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="treeitem"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid
     color-mix(in srgb, var(--dsw-focus-ring-color, var(--fh-brand)) 72%, transparent);
   outline-offset: 2px;
+}
+
+/* 指针模态：宿主的契约是「不显示焦点环」，我们跟随。
+   注意 data-input-modality 和 data-dsh-furina 都挂在 <html> 上，所以两条
+   属性写进同一个复合选择器里 —— 写成 `html[x] html[y] ` 是永远不匹配的。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-input-modality="pointer"]
+  :is(button, input, textarea, select, summary, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="treeitem"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible:not(:read-write) {
+  outline-color: transparent;
 }
 
 /* ---------------------------------------------------------------------------

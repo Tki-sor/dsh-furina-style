@@ -283,6 +283,22 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
    锚点全用宿主公开的 data-code-block-*（banner / content），不碰 hash 类名。
    -------------------------------------------------------------------------- */
 
+/* 0.11.0：给整块补一圈外框。宿主只画了两层底色（banner 深、正文更深），在水面
+   画布上边界会糊掉 —— 深色代码块贴着浅色画布时像一整块「洞」。0.5px 发丝边
+   就能读出一个容器。不动 radius：宿主 banner 的圆角是 16/16/0/0，外层改圆角
+   会对不上；也不加 overflow:hidden，宿主非 compact 形态下 banner 是 sticky，
+   裁切会把它切坏。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] .md-code-block {
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 90%, transparent);
+  box-shadow: 0 1px 2px rgb(16 24 44 / 0.06);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body[data-ds-dark-theme]
+  .md-code-block {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.32);
+}
+
 /* banner 与正文之间：一条水色发丝线，而不是两块灰硬拼。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   [data-code-block-banner="true"] {

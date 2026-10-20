@@ -38,7 +38,11 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat
    D2. 表格：发丝线 + 表头水膜 + 斑马纹
    ---------------------------------------------------------------------------
    宿主表格是无边框的（td 只有一条 0.667px 下边线），多列时很难对齐阅读。
-   这里只补「行与行之间」的边界，不画外框 —— 外框会和对话流的水面打架。
+   这里先补「行与行之间」的边界。
+
+    0.11.0 改了主意：加外框。理由是横向溢出 —— 宿主表格是 width:max-content，
+    宽表会撑出对话列宽度、横向滚动，没有外框时读者看不出边界在哪，也看不出
+    「右边还有」。0.5px 发丝边比整块底色轻，贴着水面读起来仍是一层膜。
    ------------------------------------------------------------------------- */
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] table {
   border-collapse: separate;
@@ -62,9 +66,14 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat
   background: color-mix(in srgb, var(--fh-brand) 8%, transparent);
 }
 
-/* 表格滚动容器：贴一层极薄的顶/底渐隐，提示「还能横向滚」 */
+/* 表格滚动容器 = 表格的外框。这一层宿主自己带 overflow-x:auto，一轴 auto 时
+   另一轴会自动 compute 成 auto，内容自然被裁到圆角内侧 —— 所以只给圆角，
+   不写 overflow:hidden（也就不会破坏宿主 .md-table-wide 的 hover 切滚动）。
+   background-clip:padding-box 保证 th 底色不会漫到边框外面去。 */
 html[data-dsh-furina][data-dsh-furina-layout="on"] [data-slot="conversation.chat.node"] [class*="_tableScroll"] {
-  border-radius: var(--dsw-radius-sm, 8px);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 85%, transparent);
+  border-radius: var(--dsw-radius-md, 12px);
+  background-clip: padding-box;
 }
 
 /* ---------------------------------------------------------------------------
@@ -204,3 +213,39 @@ html[data-dsh-furina][data-dsh-furina-layout="on"] [data-turn-process]:hover {
   color: var(--dsw-alias-label-tertiary);
   opacity: 1;
 }
+
+/* ---------------------------------------------------------------------------
+   D9. 我发出的附件：文件卡
+   ---------------------------------------------------------------------------
+   宿主把「我发了什么」画进 [data-message-attachments]（MessageItem 的
+   attachmentRow，稳定属性，不是 hash 类名）。它只有 flex 布局，没有任何主题化：
+   文件卡是一块 240x64 的透明底 + 0.5px 边，贴在插画画布上几乎看不见。
+
+   这里只做三件事：给文件卡一层极淡的水膜底、把圆角收到与正文同级、让悬停有一
+   点响应。图片那头由 L11 的排布规则管，这里不碰。
+
+   锚点策略：容器用 data-message-attachments（跨版本契约）；卡片本身没有 data-*，
+   只能用 CSS-module 的「人写部分」子串 _fileCard —— 这是本文件里少数几处 hash
+   类名例外，注释在此说明。用 :where() 包住前缀把特异性压到最低，宿主若换了内部
+   结构这条规则自然失效，不会误伤别的东西。
+   ------------------------------------------------------------------------- */
+:where(html[data-dsh-furina][data-dsh-furina-layout="on"])
+  [data-message-attachments] {
+  gap: 8px;
+}
+
+:where(html[data-dsh-furina][data-dsh-furina-layout="on"])
+  [data-message-attachments]
+  [class*="_fileCard"] {
+  border-radius: var(--dsw-radius-md, 12px);
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 90%, transparent);
+  background: color-mix(in srgb, var(--dsw-specific-input-major) 78%, transparent);
+  transition: background-color var(--fh-dur-feedback) var(--fh-ease-standard);
+}
+
+:where(html[data-dsh-furina][data-dsh-furina-layout="on"])
+  [data-message-attachments]
+  [class*="_fileCard"]:hover {
+  background: color-mix(in srgb, var(--fh-brand) 8%, transparent);
+}
+

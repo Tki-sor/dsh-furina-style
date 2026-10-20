@@ -49,6 +49,130 @@
 > 「+」搬进卡面内部左下变成 24×24 圆角方块、发送键搬进卡面内部右下，
 > 权限 / 模型落到卡下同一行；设置页去卡片化（行 + 0.5px 分隔线、行标题 14/400）；
 > 右侧栏账号行与它 portal 出来的菜单、会话头右上那颗 dock 开关也一并对齐 claude。
+> **0.11.0 起**：正文里那些「宿主只画了底色、没画边界」的容器补上发丝外框 ——
+> 代码块、宽表格、你自己发出去的附件卡；焦点环同时收窄到「真有焦点语义」的
+> 控件，并跟住宿主的指针模态契约（鼠标点出来的不亮环）。
+
+### 0.11.0 做了什么
+
+这一版没有新的设置项，也没有搬家 —— 改的全是**边界**：四类「宿主画了里面、
+没画外面」的容器，以及一圈原来给得太宽的焦点环。
+
+起点是两份材料。一份是把 claude-style 的成品 CSS 逐字拆出来（它 1161 条顶层
+规则、277 KB），看哪些**能**用；另一份是在隔离实例里用 CDP 量宿主的真实 DOM
+与几何，看哪些**改了会坏**。结论有点反直觉：claude 那套结构锚点几乎全是它自己
+用 JS 注入的 `data-dsh-claude-part`，宿主的 asar 里 `part` 属性一次都没出现 ——
+照抄等于写一堆永不生效的规则。
+
+所以这一版只做**锚点能站稳**的部分。
+
+#### 一、焦点环：先收窄给谁，再跟上什么时候给（`10-layout.css` L8）
+
+原来那一条是：
+
+```css
+:focus-visible { outline: 2px solid …; outline-offset: 2px; }
+```
+
+两件事都不对。
+
+**其一，宿主的可聚焦元素远比按钮多。** 滚动区、代码块、消息容器、表格滚动层
+全都 `tabindex=0` 或有 programmatic focus。无差别给 `:focus-visible` 的结果是：
+鼠标点一下消息区，那一大片会亮出一圈 2px 环 —— 而 `:focus-visible` 的启发式
+在 `div` 上并不会帮你判断「用户其实是在用鼠标」。
+
+**其二，宿主自己有 modality 契约，我们没跟。** 宿主的原文是：
+
+```css
+html[data-input-modality="pointer"] body :focus-visible:not(:read-write) { … transparent }
+```
+
+指针模态下不显示焦点环。我们原来没跟这条，于是键盘操作才该有的环，鼠标用户
+也会看到。
+
+所以现在拆成两条：第一条把选择器限到 `:is(button, input, textarea, select,
+summary, a[href], [role=button], [role=tab], [role=menuitem], [role=treeitem],
+[role=switch], [role=checkbox], [role=radio])`（真·焦点语义的角色）；第二条在
+`[data-input-modality="pointer"]` 下把 `outline-color` 设成 transparent。
+
+⚠️ 有个纯 CSS 的坑写在这：`data-dsh-furina` 和 `data-input-modality` **都挂在
+`<html>` 上**，所以必须写进同一个复合选择器：
+
+```css
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-input-modality="pointer"] …
+```
+
+写成 `html[data-input-modality="pointer"] html[data-dsh-furina] …` 是「html 里再
+套一个 html」，**永远不匹配**（第一版就是这么写的，ring 一条都没生效）。同类的
+坑在 P1 里也踩过一次：`data-ds-dark-theme` 挂在 `body` 上，不能和 `html` 上的
+属性并列。
+
+#### 二、代码块：一圈 0.5px 发丝外框（`15-polish.css` P8）
+
+宿主给代码块画了**两层底色**（banner 深一点、正文更深一点），但外边界什么都没有。
+在浅色画布上，深色块贴着浅底读起来像「一块洞」，看不出它是个容器。
+
+补的就是`border: 0.5px solid border-l2 (90%)` + 一层 1px 极轻落影（暗色换更深的
+`rgb(0 0 0 / 0.32)`）。
+
+两条刻意的「不做」：
+
+- **不改 `border-radius`**。宿主 banner 的圆角是 `16px 16px 0 0`，外层如果也写
+  圆角，两层圆角对不齐，反而露出毛边；
+- **不加 `overflow: hidden`**。非 compact 形态下 banner 是 `position: sticky`
+  的，裁切会把它切坏。
+
+顺带说一句：claude-style 在这一块只有「整块 1px 边 + 12px 圆角」，没有 banner 与
+复制按钮的任何规则 —— 那两块（`P8` 原有的 0.5px 分隔线、复制按钮 4px 圆角 +
+18% 品牌色水膜）本来就是我们自己写的，这一版只补外框。
+
+#### 三、宽表格：外框 + 圆角，但不夺走宿主的横向滚动（`50-details.css` D2）
+
+0.3.0 那一版**故意不画外框**，注释里写的理由是「外框会和对话流的水面打架」。
+0.11.0 改了主意，理由是**横向溢出**：宿主表格是 `width: max-content`，宽表会
+撑出对话列、横向滚动；没有外框时读者既看不出边界在哪，也看不出「右边还有」。
+
+新规则挂在 `[class*="_tableScroll"]`（宿主那个 `overflow-x: auto` 的滚动容器）上：
+
+```css
+border: 0.5px solid color-mix(in srgb, var(--dsw-alias-border-l2) 85%, transparent);
+border-radius: var(--dsw-radius-md, 12px);
+background-clip: padding-box;
+```
+
+**为什么只给圆角、不写 `overflow: hidden`：** 一轴是 `auto` 时，另一轴会自动
+compute 成 `auto`，内容本来就会被裁到圆角内侧；显式写 `hidden` 反而会掐住宿主
+`.md-table-wide` 那个「平时 `overflow-x:hidden`、hover/focus 才切 `scroll`」的
+行为。`background-clip: padding-box` 是给 `th` 的底色兜底，别让它漫到边框外侧。
+
+#### 四、我发出的附件：给文件卡一层水膜（`50-details.css` D9）
+
+宿主把我发出去的附件画进 `[data-message-attachments]`（这是稳定属性，不是哈希
+类名），但它只有 flex 布局，没有任何主题化：文件卡是 240×64 的透明底 + 0.5px 边，
+贴在插画画布上几乎看不见。
+
+这一版给它三件事：一层 `specific-input-major` 的 78% 水膜底、圆角收到与正文同级
+的 12px、hover 时浮 8% 品牌色。
+
+**锚点上的一个例外必须说明**：容器有 `data-message-attachments`，但**卡片本身
+没有 data-***，只有 CSS module 的 `_fileCard`。这是本仓库里少数几处哈希类名
+例外，注释里已写明。为了把风险压到最低，前缀用 `:where()` 包住（特异性归零），
+宿主若换了内部结构，这条规则自然失效、不会误伤别的东西。
+
+同一版里也**没有**去动输入区的附件轨（粘贴图片后出现的那条缩略图带）：它在
+宿主里只有 `srf2qa_rail` 这类哈希类，没有任何 data-* 可锚；claude-style 那 19 条
+附件规则全锚在它自己 JS 注入的 part 上，搬不过来。宁可不做。
+
+#### 这一版没做的事
+
+- **输入区附件轨**：见上，没有稳定锚点；
+- **表格的「还能横向滚」渐隐**：宿主自己已经有 `.md-table-wide` 的 hover 切滚动，
+  再叠一层 mask 会和它的 `padding-bottom: var(--dsh-scrollbar-width, 5px)` 打架；
+- **会话头下渐隐纱**：claude 的纵向渐隐（`--dsh-claude-fade-stops`）可以借，
+  但它的落点是 `[data-composer-seat]:before`，也就是**输入区上方**而不是会话头；
+  照搬到会话头需要重新定 stop 位置，留给下一版；
+- **照抄 claude 的结构部分**：它 120 个 `data-dsh-claude-part~=` 值在宿主 asar 里
+  一次都不存在，这些规则（表格、附件、会话头、侧栏行、hero 容器）全部跳过。
 
 ### 0.10.0 做了什么
 
