@@ -41,11 +41,12 @@ function probe() {
     const r = element.getBoundingClientRect();
     return r.width && r.height ? {x: r.x, y: r.y, width: r.width, height: r.height} : null;
   };
-  const rect = selector => box(document.querySelector(selector));
+  const rect = selector => [...document.querySelectorAll(selector)].map(box).find(Boolean) || null;
   return {
     task: rect('[data-testid="todo-panel"]'), input: rect('[data-input-scroll]'),
     permission: rect('[data-slot="conversation.input.permission"] button'),
-    model: rect('[data-slot="conversation.input.model"] button'), stats: rect('[data-composer-dock]'),
+    model: rect('.fh-model-button') || rect('[data-slot="conversation.input.model"] button'), stats: rect('[data-composer-dock]'),
+    effort: rect('.fh-effort-button'),
     pills: [...document.querySelectorAll('[data-composer-dock] button, [data-composer-stat] > span')].map(box).filter(Boolean),
     plainLabels: [...document.querySelectorAll('[data-composer-stat] > span [class*="_label"]')].map(e => ({text:e.textContent,display:getComputedStyle(e).display})),
     add: rect('[data-composer-card] [class*="_add"]'),
@@ -58,10 +59,10 @@ function check(g) {
   assert.ok(Math.abs(g.task.x - g.input.x) < 1, 'Task and input left edges differ');
   assert.ok(Math.abs(g.task.width - g.input.width) < 1, 'Task and input widths differ');
   const middle = r => r.y + r.height / 2;
-  for (const r of [g.permission, g.model, ...g.pills]) {
+  for (const r of [g.permission, g.model, ...g.pills, ...(g.effort ? [g.effort] : [])]) {
     assert.ok(Math.abs(middle(r) - middle(g.stats)) < 2, 'Controls occupy separate rows');
   }
-  const controls = [g.permission, ...g.pills, g.model].sort((a, b) => a.x - b.x);
+  const controls = [g.permission, ...g.pills, g.model, ...(g.effort ? [g.effort] : [])].sort((a, b) => a.x - b.x);
   for (let i = 1; i < controls.length; i++) {
     assert.ok(controls[i - 1].x + controls[i - 1].width <= controls[i].x + 1, 'Footer controls overlap');
   }

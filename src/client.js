@@ -39,6 +39,11 @@ window.__ModuleLoader__.load({
         ? React.createElement.bind(React)
         : null;
 
+    var ReactDOM = null;
+    try { ReactDOM = require('react-dom'); } catch (error) { ReactDOM = null; }
+
+    /* __FH_CONTROLS__ */
+
     /* ------------------------------------------------------------------ */
     /* 常量                                                                */
     /* ------------------------------------------------------------------ */
@@ -1678,6 +1683,7 @@ window.__ModuleLoader__.load({
         install(t);
       }
       installSettings(ctx, t);
+      installComposerControls(ctx);
     }
 
     exports.apply = apply;

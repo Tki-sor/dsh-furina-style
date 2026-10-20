@@ -89,7 +89,11 @@ async function main() {
   const artUri = await loadArt();
   const stylesheet = parts.join('\n\n').replaceAll(ART_PLACEHOLDER, artUri);
 
-  const clientSource = await readFile(join(SRC, 'client.js'), 'utf8');
+  const template = await readFile(join(SRC, 'client.js'), 'utf8');
+  const controls = await readFile(join(SRC, 'composer-controls.js'), 'utf8');
+  const marker = '/* __FH_CONTROLS__ */';
+  if (template.split(marker).length !== 2) throw new Error('expected one controls marker');
+  const clientSource = template.replace(marker, controls);
   const occurrences = clientSource.split(PLACEHOLDER).length - 1;
   if (occurrences !== 1) {
     throw new Error(

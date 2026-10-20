@@ -1,0 +1,556 @@
+/* Claude-like controls over the native framed composer.
+ * Native React buttons, handlers, labels and permission confirmation stay intact.
+ * ContextMeter is a direct dock child (_2WTFBq_root), NOT a named slot.
+ * Keep the subgrid from 18: reserve its trailing column's real width for the meter.
+ */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  div:has(> [data-composer-card]) {
+  position: relative;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-dock] {
+  position: static !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  div:has(> [data-composer-card]):has(> [data-composer-dock] > ._2WTFBq_root) [data-composer-card] > [class*="_row"] > [class*="_trailing"] {
+  box-sizing: border-box;
+  padding-right: 72px !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-dock] > ._2WTFBq_root {
+  position: absolute !important;
+  right: 4px;
+  bottom: 4px;
+  height: 28px;
+  max-width: 64px;
+  display: flex;
+  align-items: center;
+  margin: 0 !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-dock] > ._2WTFBq_root ._2WTFBq_trigger {
+  box-sizing: border-box;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 4px;
+  gap: 4px;
+  font-size: 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card]:has(.fh-model-controls[data-ready]) [data-slot="conversation.input.model"] {
+  display: none !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls:not([data-ready]) {
+  display: none !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls[data-ready]:not([hidden]) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls :is(button.fh-model-button, button.fh-effort-button) {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls button.fh-model-button {
+  max-width: clamp(72px, 22cqw, 220px);
+  flex: 0 1 auto;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls button.fh-effort-button {
+  flex: 0 1 auto;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-secondary);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls button > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  :is(.fh-model-controls button, .fh-control-close):is(:hover, [aria-expanded="true"]):not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  :is(.fh-model-controls button, .fh-model-option, .fh-control-close, .fh-model-search, .fh-effort-range input):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 65%, transparent);
+  outline-offset: 2px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Native permission trigger: source PermissionSelect.module.css. Restore the
+ * label hidden by 18 at <=360px; hide ONLY this trigger's decorative spans. */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-slot="conversation.input.permission"] button.dlU_AG_trigger {
+  height: 24px !important;
+  min-height: 24px !important;
+  max-width: clamp(64px, 20cqw, 160px);
+  padding: 0 6px !important;
+  gap: 0 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px !important;
+  font-weight: 500;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-slot="conversation.input.permission"] button.dlU_AG_trigger .dlU_AG_triggerLabel {
+  display: block !important;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-slot="conversation.input.permission"] button.dlU_AG_trigger :is(.dlU_AG_triggerIcon, .dlU_AG_chevron) {
+  display: none !important;
+}
+
+/* Extracted InputBar uses _primary for both actions, with path for send and
+ * rect for stop. Also support _send, without turning a stop square into return.
+ * Match 17's specificity so its !important blue/border/28px rules cannot win. */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]) {
+  box-sizing: border-box;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):not(:has(svg rect)) {
+  bottom: 43.5px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):not(:has(svg rect)) > svg {
+  display: none !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):not(:has(svg rect))::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 3.75h5.25v7H3M6 7.75l-3 3 3 3' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  pointer-events: none;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent) !important;
+  border: 0 !important;
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):disabled {
+  background: transparent !important;
+  color: var(--dsw-alias-label-caption) !important;
+  opacity: 0.45 !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [class*="_trailing"] button:is([class*="_primary"], [class*="_send"]):not([hidden]):has(svg rect) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent) !important;
+  color: var(--dsw-alias-brand-primary) !important;
+}
+
+/* PermissionSelect passes portal:true to the shared Menu without a panel class.
+ * A post-open marker identifies the selected native permission menu, including
+ * catalogs without Auto, without recoloring other menus or confirmation dialogs.
+ * Shared Menu's source uses _list_, _material_, _itemIcon_ and menuitem roles.
+ */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body > [role="menu"][data-fh-permission-menu] {
+  box-sizing: border-box;
+  min-width: min(264px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, var(--dsw-alias-border-l1));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 96%, var(--dsw-alias-brand-primary));
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--fh-water-ink, #1d2539) 18%, transparent), 0 2px 8px rgb(0 0 0 / 0.08);
+  overflow: hidden;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body > [role="menu"][data-fh-permission-menu] > [class*="_material_"] {
+  background: transparent !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body > [role="menu"][data-fh-permission-menu] [role="menuitem"] {
+  min-height: 32px !important;
+  padding: 5px 8px !important;
+  border-radius: 7px !important;
+  color: var(--dsw-alias-label-primary) !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body > [role="menu"][data-fh-permission-menu] [role="menuitem"]:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  body > [role="menu"][data-fh-permission-menu] [class*="_itemIcon_"] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .dlU_AG_badge {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 9%, transparent);
+  color: var(--dsw-alias-brand-primary);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+/* Portals are body children: scope to html, never to the composer card. */
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-control-popover[role="dialog"] {
+  position: fixed;
+  z-index: var(--fh-layer-popover, 1000);
+  box-sizing: border-box;
+  width: 304px;
+  min-width: min(264px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(440px, calc(100dvh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, var(--dsw-alias-border-l1));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 96%, var(--dsw-alias-brand-primary));
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--fh-water-ink, #1d2539) 18%, transparent), 0 2px 8px rgb(0 0 0 / 0.08);
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-search {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  margin: 0 0 8px;
+  padding: 0 9px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 80%, transparent);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-search::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-group {
+  display: grid;
+  gap: 2px;
+  margin-block: 6px;
+  min-width: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-model-group > :is(h3, h4, .fh-model-group-label) {
+  margin: 0;
+  padding: 5px 8px 3px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  button.fh-model-option {
+  appearance: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  button.fh-model-option:is(:hover, [aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  button.fh-model-option[aria-pressed="true"] {
+  color: var(--dsw-alias-brand-primary);
+  font-weight: 500;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  :is(.fh-control-error, .fh-effort-note) {
+  margin: 8px 2px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-effort-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 8px;
+  font-weight: 500;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-effort-head > :last-child:not(:first-child) {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 400;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-effort-range {
+  padding: 5px 8px 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]::-webkit-slider-runnable-track {
+  box-sizing: border-box;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 20%, var(--dsw-alias-border-l1));
+  border-radius: 5px;
+  background: linear-gradient(to right, color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, var(--dsw-alias-bg-layer-1)) 0 var(--fh-effort-fill, 50%), color-mix(in srgb, var(--dsw-alias-label-primary) 6%, var(--dsw-alias-bg-layer-1)) var(--fh-effort-fill, 50%) 100%);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 30px;
+  margin-top: -3px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, var(--dsw-alias-border-l1));
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.16);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]::-moz-range-track {
+  height: 24px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, var(--dsw-alias-bg-layer-1));
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]::-moz-range-progress {
+  height: 24px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, var(--dsw-alias-bg-layer-1));
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 16px;
+  height: 30px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.16);
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  input.fh-effort-range[type="range"]:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-effort-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 8px 4px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  .fh-control-close {
+  appearance: none;
+  display: block;
+  margin: 8px 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+@container fh-composer (width <= 440px) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    div:has(> [data-composer-card]):has(> [data-composer-dock] > ._2WTFBq_root) [data-composer-card] > [class*="_row"] > [class*="_trailing"] {
+    padding-right: 32px !important;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-dock] > ._2WTFBq_root ._2WTFBq_trigger > span {
+    display: none;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-dock] > ._2WTFBq_root ._2WTFBq_trigger {
+    width: 28px;
+    justify-content: center;
+    gap: 0;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    .fh-model-controls button.fh-model-button {
+    max-width: 76px;
+    padding-inline: 4px;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    .fh-model-controls button.fh-effort-button {
+    max-width: 64px;
+    padding-inline: 4px;
+  }
+}
+
+@container fh-composer (width <= 360px) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    .fh-model-controls button.fh-model-button {
+    max-width: 62px;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    .fh-model-controls button.fh-effort-button {
+    max-width: 54px;
+  }
+}
+
+/* Never override the host's activity/locked visibility while styling flex rows. */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] [hidden] {
+  display: none !important;
+}
