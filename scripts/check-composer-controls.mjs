@@ -119,6 +119,7 @@ try {
   await evaluate('(' + mountFixture.toString() + ')(' + JSON.stringify(source) + ',' + JSON.stringify(css) + ')'); await settle();
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-model-button").disabled'), false);
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-effort-button").textContent'), 'Default');
+  assert.ok(await evaluate('('+(()=>{const button=window.__fhFixtureQuery('.fh-effort-button'),range=document.createRange();range.selectNodeContents(button);return range.getBoundingClientRect().width<=button.clientWidth+1;}).toString()+')()'), 'Default effort text must not be squeezed into clipped middle letters');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-slot="conversation.input.model"]')).display`), 'none');
   for (const extra of [[], ['--plain']]) execFileSync(process.execPath, [fileURLToPath(new URL('./check-composer-layout.mjs', import.meta.url)), '--matrix', ...extra], {stdio:'inherit'});
   execFileSync(process.execPath, [fileURLToPath(new URL('./check-composer-stability.mjs', import.meta.url)), '--matrix'], {stdio:'inherit'});
@@ -153,7 +154,7 @@ try {
           } finally {activity.remove();tools.hidden=previous.tools;standard.hidden=previous.standard;trailing.className=previous.className;if(meter){if(previous.meterStyle===null)meter.removeAttribute("style");else meter.setAttribute("style",previous.meterStyle);}}
         }).toString() + ')()'
       );
-      assert.ok(active.width>=136 && active.hit, 'Active/queued actions must not be clipped inside the permission track');
+      assert.ok(active.width>=80 && active.hit, 'Active/queued actions must remain hit-testable in the right wing');
       assert.ok(active.drift<1, 'Active controls must preserve statistics positions');
     } finally {
       await send('Emulation.setDeviceMetricsOverride',{width:before.width,height:before.height,deviceScaleFactor:before.dpr,mobile:false});

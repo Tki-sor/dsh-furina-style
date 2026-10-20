@@ -93,7 +93,10 @@ async function main() {
   const controls = await readFile(join(SRC, 'composer-controls.js'), 'utf8');
   const marker = '/* __FH_CONTROLS__ */';
   if (template.split(marker).length !== 2) throw new Error('expected one controls marker');
-  const clientSource = template.replace(marker, controls);
+  const accountMarker = '/* __FH_ACCOUNT_MENU__ */';
+  if (template.split(accountMarker).length !== 2) throw new Error('expected one account menu marker');
+  const account = await readFile(join(SRC, 'account-menu.js'), 'utf8');
+  const clientSource = template.replace(marker, controls).replace(accountMarker, account);
   const occurrences = clientSource.split(PLACEHOLDER).length - 1;
   if (occurrences !== 1) {
     throw new Error(

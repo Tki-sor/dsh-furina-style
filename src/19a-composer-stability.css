@@ -1,6 +1,6 @@
-/* Stable geometry is independent of model/provider label lengths.
- * Reserve tracks from the input width, not the controls' intrinsic widths.
- * The model ellipsizes in its own track; it cannot borrow statistics space.
+/* Symmetric wings keep token statistics on the INPUT centerline.
+ * The center width depends only on the input, never on model/provider text.
+ * Model and effort retain a compact, right-aligned group beside context.
  */
 html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"] {
   [data-goal-bar] {
@@ -17,20 +17,18 @@ html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="fra
   }
   div:has(> [data-composer-card]),
   div:has(> [data-composer-card] > [class*="_row"] > [class*="_tools"][hidden]) {
-    grid-template-columns: clamp(28px, 12%, 88px) minmax(0, 1fr) clamp(136px, 38%, 340px);
+    grid-template-columns: minmax(0, 1fr) clamp(60px, calc(100% - 424px), 408px) minmax(0, 1fr);
   }
   [data-composer-dock] {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    display: flex !important;
     align-items: center;
-    justify-content: stretch !important;
+    justify-content: center !important;
   }
   [data-composer-stat] {
-    width: 100%;
+    width: auto;
     min-width: 0;
+    flex: 0 1 auto;
   }
-  [data-composer-stat="activity"] { grid-column: 1; }
-  [data-composer-stat="usage"] { grid-column: 2; }
   [data-composer-stat] > :is(button, span) { max-width: 100%; }
   [data-composer-card] > [class*="_row"] > [class*="_tools"],
   [data-composer-card] > [class*="_row"] > [class*="_trailing"] {
@@ -48,17 +46,20 @@ html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="fra
   [data-composer-card] [class*="_right"] {
     min-width: 0;
     max-width: 100%;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
   }
   .fh-model-controls[data-ready] {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    justify-content: flex-end;
     min-width: 0;
     max-width: 100%;
   }
   .fh-model-controls button.fh-model-button {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
   }
+  /* Let the model ellipsize before squeezing a short effort label. */
+  .fh-model-controls button.fh-effort-button { flex-shrink: 0; }
   [data-composer-card] [class*="_modes"] {
     flex: 1 1 auto;
     min-width: 0;

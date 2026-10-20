@@ -45,8 +45,8 @@
        都会变；菜单原语的类名是 `_itemIcon_4ub78_148` 这种「_名字_哈希_序号」
        格式，同样会变。**本文件不写任何哈希类名**；内部结构一律用
        `:nth-child(2)` / `:first-child:has(svg)` / `:has(kbd)` 这样的结构关系
-       表达。唯一一处 class 子串是 H3 里的 `[class*="_signedOutMenu"]`，只匹配
-       语义名字段、不匹配哈希，理由写在那一节的注释里。
+       表达。菜单身份与 viewport / footer / selected 仅匹配 CSS-module 的
+       语义名字段、不匹配哈希；它们分别对应宿主菜单原语，不匹配第三方皮肤标记。
      · 菜单那张卡是 portal 到 body 的，所以它不继承侧栏的任何上下文；颜色能跟
        随主题，是因为 --dsw-* 别名声明在 `body` 上（见 00-tokens.css 的注释）。
    ========================================================================== */
@@ -258,10 +258,12 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
    `._material_ri079_21` 画（background: var(--dsw-menu-surface-fill)，
    backdrop-filter: var(--dsw-menu-backdrop-filter) === blur(40px) saturate(150%)）。
 
-   我们不碰 material 那一层，只改它外面这层壳：material 用 `border-radius:
-   inherit` 和 `inset:0` 跟着壳走，所以改壳的圆角和内边距，底色和毛玻璃会
-   自己跟着变圆、变窄。这是「少改一层」的关键——直接写 ._material_ 反而会
-   因为它 inset:0 而盖住新加的 1px 边框。
+   对照已安装 Claude 的 [data-dsh-claude-account-menu]（client.js 4660–4714）：
+   壳 padding 6 / border 1 / radius 12；viewport padding 0；separator 1px、
+   margin 2px -6px；footer 上边距与内边距各 2px。只补这些原语已有的结构。
+   material 仍由宿主绘制，自有/芙宁娜表面只通过公开 --dsw-menu-* 变量换底色。
+   不写 position / inset：保留宿主向上锚定。account-menu.js 仅标记账号触发打开的
+   portal，并测量触发行宽度；260px 只是折叠侧栏 fallback。
 
    为什么不像 claude-style 那样补一条 12px 的隐形 hover 桥：那张卡是**点击**
    打开的（宿主 AccountMenu 的 onClick 切 open，Menu 的 closeOnPointerLeave
@@ -269,16 +271,14 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
    成离开。桥只在 hover-open 的交互里才有必要。
 
    收窄命中的两个判别式（命中任一即算账号菜单）：
-     ① `:has([role="menuitem"][aria-keyshortcuts])`
-        设置项是宿主唯一带 shortcut 的项（`{id:"settings", …, shortcut:
-        settingsShortcut}`，只在「设置」命令确实绑定了键位时才传）。桌面端
-        默认绑 Mod+,，所以正常情况这条恒真。
+     ① `[data-fh-account-menu]`
+        只由 settings.launcher 触发后标记的 portal。不依赖设置快捷键是否绑定，
+        也不会误伤带快捷键的其他菜单。
      ② `[class*="_signedOutMenu"]`
         **兜底**，只覆盖「未登录」那一种菜单。类名全称是
         `ET65mq_signedOutMenu`，形如 `<哈希>_<语义名>`；哈希每次发版都变，
         但 `_signedOutMenu` 这一段是宿主 sourcemap 里的语义名字，稳定。这里
-        只匹配名字段、不匹配哈希 —— 这是本文件唯一一处 class 子串，写在这里
-        是因为未登录菜单没有快捷键项，① 会漏掉它。
+        只匹配名字段、不匹配哈希，保留未登录外观兜底。
 
    为什么不用 `[data-menu-material="translucent"]`：它挂在菜单表面组件上，
    所有 ui-primitives 菜单（含 ui-schedule 的 TaskMenu、斜杠菜单）都带，
@@ -287,10 +287,13 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   ) {
   box-sizing: border-box;
+  width: min(var(--fh-account-width, 260px), calc(100vw - 16px));
+  min-width: 0;
+  max-width: none;
   padding: 6px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
@@ -314,9 +317,10 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body[data-ds-dark-theme]
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   ) {
+  border-color: var(--dsw-alias-border-l2);
   box-shadow:
     0 8px 30px 0 rgb(0 0 0 / 0.5),
     0 2px 8px 0 rgb(0 0 0 / 0.3);
@@ -338,7 +342,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"] {
@@ -364,14 +368,14 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"]:hover:not(:disabled),
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"]:focus-visible:not(:disabled) {
@@ -388,7 +392,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"]
@@ -405,7 +409,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"]
@@ -420,12 +424,77 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   [role="menuitem"]
   > span:has(kbd) {
   color: var(--dsw-alias-label-caption);
+}
+
+/* 原生菜单的 viewport / 分隔线 / footer：与参考的 menu-viewport、
+   menu-footer、menu-item-selected 映射同源，只匹配模块语义段，不绑构建哈希。
+   不添加账号头、重复设置项或 hover 桥；设置 / 反馈 / 退出仍是原生按钮。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    [data-fh-account-menu],
+    [class*="_signedOutMenu"]
+  )
+  > [class*="_viewport_"] {
+  padding: 0 !important;
+  overflow-x: hidden !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    [data-fh-account-menu],
+    [class*="_signedOutMenu"]
+  )
+  [role="separator"] {
+  height: 1px !important;
+  margin: 2px -6px !important;
+  background: var(--dsw-alias-border-l1) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    [data-fh-account-menu],
+    [class*="_signedOutMenu"]
+  )
+  [class*="_footer_"] {
+  margin-top: 2px !important;
+  padding-top: 2px !important;
+  border-top: 1px solid var(--dsw-alias-border-l1) !important;
+}
+
+/* 键盘活动项由 Menu 写在 itemWrap 上，不等同于按钮的 :focus-visible。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  body
+  > [role="menu"]:is(
+    [data-fh-account-menu],
+    [class*="_signedOutMenu"]
+  )
+  [class*="_itemWrap_"][class*="_selected_"] {
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent) !important;
+}
+
+/* 只在本插件拥有表面时去掉原生毛玻璃；other 模式保留第三方材质。
+   不直接覆盖 material 子层，宿主的边框裁切、portal 和鼠标行为保持原样。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"]:is(
+    [data-dsh-furina-surfaces="own"],
+    [data-dsh-furina-surfaces="furina"]
+  )
+  body
+  > [role="menu"]:is(
+    [data-fh-account-menu],
+    [class*="_signedOutMenu"]
+  ) {
+  --dsw-menu-surface-fill: var(--dsw-alias-bg-overlay);
+  --dsw-menu-backdrop-filter: none;
+  background: var(--dsw-alias-bg-overlay);
 }
 
 /* ----------------------------------------------------------------------------
@@ -456,7 +525,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   ) {
   animation: fh-dropdown-in 250ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -465,7 +534,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   )
   > * {
@@ -478,7 +547,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
   html[data-dsh-furina][data-dsh-furina-layout="on"]:not([data-dsh-furina-motion="on"])
     body
     > [role="menu"]:is(
-      :has([role="menuitem"][aria-keyshortcuts]),
+      [data-fh-account-menu],
       [class*="_signedOutMenu"]
     ) {
     animation: none;
@@ -496,7 +565,7 @@ html[data-dsh-furina][data-dsh-furina-layout="on"]
 html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-motion="reduced"]
   body
   > [role="menu"]:is(
-    :has([role="menuitem"][aria-keyshortcuts]),
+    [data-fh-account-menu],
     [class*="_signedOutMenu"]
   ) {
   animation: none;

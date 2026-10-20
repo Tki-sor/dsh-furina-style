@@ -251,7 +251,7 @@ function FurinaReadyModelControls({ directory, available }) {
   );
   return h('div', { ref: anchor, className: 'fh-model-controls', 'data-ready': '', 'aria-busy': busy },
     h('button', { type: 'button', className: 'fh-model-button', disabled: locked || busy, title: current?.model.name ?? '选择模型', 'aria-label': '选择模型：' + (current?.model.name ?? '未选择'), 'aria-haspopup': 'dialog', 'aria-expanded': pane === 'model', 'aria-controls': pane === 'model' ? id : undefined, onClick: (event) => open('model', event) }, h('span', { className: 'fh-model-label' }, current?.model.name ?? '选择模型')),
-    levels.length > 0 ? h('button', { type: 'button', className: 'fh-effort-button', disabled: locked || busy, 'aria-label': '推理强度：' + effortLabel, 'aria-haspopup': 'dialog', 'aria-expanded': pane === 'effort', 'aria-controls': pane === 'effort' ? id : undefined, onClick: (event) => open('effort', event) }, effortLabel) : null,
+    levels.length > 0 ? h('button', { type: 'button', className: 'fh-effort-button', disabled: locked || busy, 'aria-label': '推理强度：' + effortLabel, 'aria-haspopup': 'dialog', 'aria-expanded': pane === 'effort', 'aria-controls': pane === 'effort' ? id : undefined, onClick: (event) => open('effort', event) }, h('span', { className: 'fh-model-label' }, effortLabel)) : null,
     popup === null ? null : ReactDOM.createPortal(popup, document.body)
   );
 }

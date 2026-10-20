@@ -38,7 +38,7 @@ async function evaluate(expression) {
 function geometry() {
   const box=e=>{const r=e?.getBoundingClientRect();return r?.width?{x:r.x,width:r.width,y:r.y}:null};
   const visible=s=>[...document.querySelectorAll(s)].find(e=>e.getBoundingClientRect().width);
-  return {input:box(visible('[data-input-scroll]')),goal:box(document.querySelector('[data-goal-bar]')?.firstElementChild),stats:[...document.querySelectorAll('[data-composer-stat]')].map(box)};
+  return {input:box(visible('[data-input-scroll]')),goal:box(document.querySelector('[data-goal-bar]')?.firstElementChild),stats:[...document.querySelectorAll('[data-composer-stat]')].map(box),dock:box(document.querySelector('[data-composer-dock]')),model:box(visible('.fh-model-button')),effort:box(visible('.fh-effort-button')),context:box(visible('[data-composer-dock] > ._2WTFBq_root'))};
 }
 const settle=()=>evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
 let original;
@@ -58,6 +58,16 @@ try {
     console.log('width='+width+', goal/input='+g.goal.width+'/'+g.input.width+', statistics drift='+drift+'px');
     assert.ok(Math.abs(g.goal.x-g.input.x)<1&&Math.abs(g.goal.width-g.input.width)<1,'Goal bar and input must have identical left edge and width');
     assert.ok(drift<1,'Statistics must not move or shrink when the model label changes');
+    const centerError=Math.abs((g.dock.x+g.dock.width/2)-(g.input.x+g.input.width/2));
+    assert.ok(centerError<1,'Token statistics must remain centered on the input, not on the leftover track: '+centerError+'px');
+    const groupLeft=Math.min(...g.stats.map(r=>r.x));
+    const groupRight=Math.max(...g.stats.map(r=>r.x+r.width));
+    assert.ok(Math.abs((groupLeft+groupRight)/2-(g.input.x+g.input.width/2))<1,'The visible statistics group itself must be centered');
+    if(g.model&&g.effort){
+      assert.ok(g.effort.x-(g.model.x+g.model.width)<=3,'Model and effort must remain adjacent, not stretched apart');
+      assert.ok(g.model.x>=g.input.x+g.input.width/2,'Model and effort must stay on the right');
+      if(g.context)assert.ok(g.context.x-(g.effort.x+g.effort.width)<=36,'Model/effort group must retain its original context-side anchor: '+JSON.stringify(g));
+    }
     await evaluate('window.__fhStabilityFixture.node.textContent=window.__fhStabilityFixture.text;delete window.__fhStabilityFixture');
   }
   console.log('PASS goal/input equality and fixed statistics positions');

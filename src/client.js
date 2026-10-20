@@ -43,6 +43,7 @@ window.__ModuleLoader__.load({
     try { ReactDOM = require('react-dom'); } catch (error) { ReactDOM = null; }
 
     /* __FH_CONTROLS__ */
+    /* __FH_ACCOUNT_MENU__ */
 
     /* ------------------------------------------------------------------ */
     /* 常量                                                                */
@@ -1684,6 +1685,7 @@ window.__ModuleLoader__.load({
       }
       installSettings(ctx, t);
       installComposerControls(ctx);
+      if (ctx && typeof ctx.effect === 'function') ctx.effect(installAccountMenu, PLUGIN_ID + ': account menu');
     }
 
     exports.apply = apply;
