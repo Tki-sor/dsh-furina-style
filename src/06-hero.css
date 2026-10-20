@@ -1,0 +1,126 @@
+/* ============================================================================
+   dsh-furina-style — 06. 新会话页（H0）
+   ----------------------------------------------------------------------------
+   0.13.0 新建。这一节只做一件事：把「新会话」那一屏按 claude 的构图收拢。
+
+   宿主那一屏本来是「居中大标题 + 居中搜索框」的搜索页构图：26px 标题居中、
+   徽标跟在标题后面、内容列 752px、输入卡和标题左右对齐但都比正文列宽 32px。
+   claude 的新会话页是「左对齐小标题 + 输入框当主角」：20px/26px 标题左对齐、
+   没有徽标、内容列 720px、标题 / 工作区行 / 输入卡三者左缘与宽度完全一致。
+   差别不在单个数值，在**这一屏的重心在哪**。
+
+   为什么整节只用 :has() 和具名槽
+     宿主的 hero 变体只是 class（Dc7zOa_composerHero / RlGAzG_hero /
+   Hqq-bq_headline），没有 data-* 标记；但 hero 子树里五处弹层槽是具名的：
+     [data-slot="conversation.hero.brand.mark"]
+     [data-slot="conversation.hero.workspace"]
+     [data-slot="conversation.hero.workspace.directoryFlow"]
+     [data-slot="conversation.hero.agentPreset"]
+     [data-slot="conversation.hero.options"]
+   具名槽是跨版本契约（0.10.0 起我们最主要的一类锚点），所以标题、工作区行
+   全部从槽位反查容器，不碰哈希类名。反查层数必须精确：:has() 不能跨
+   display:contents 的槽本身数层（槽的 rect 是 0），只能数它外面的真实 div。
+
+   为什么只改 --dsh-composer-card-max-width 一个变量
+     宿主三层的宽度是联动的：
+       Dc7zOa_composerHero 宽 = card-max-width + 2 * side-clearance
+       Hqq-bq_stack        宽 = min(100%, card-max-width)
+       RlGAzG_card         宽 = min(100%, card-max-width)
+     所以在 [data-composer-seat] 上重声明这一个变量，标题列 / 工作区行 / 输入卡
+     会同时收窄并自动对齐，不需要分别设宽。反过来，去改 composerStack 宽度只会
+     得到「root 720 / stack 672 / card 688」这种谁都不齐的结果（实测过）。
+
+     取值必须写成裸 clamp(720px, 68ch, 900px)，**不要再套 min(calc(100% - 16px))**
+     ——套了之后 100%-16px 会先算成 736，最终 card 落到 704（实测）。
+    ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   H0.1 标题降档并左对齐
+   ----------------------------------------------------------------------------
+   宿主：26px/32px/500、justify-content:center、gap 12px 10px。
+   claude：20px/26px/500、justify-content:flex-start。
+   26px 在 720 列里是「横幅」，20px 才是「标题」；左对齐之后标题的起点和下面
+   输入框的起点在同一条竖线上，视线不用来回跳。
+
+   顺带把 height 钉成 26px：宿主原来靠 32px 行高撑出 38px 的 root，改成 claude
+   的字号后如果不钉高度，那一行会留出旧行高的残余空白。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> span > [data-slot="conversation.hero.brand.mark"]) {
+  justify-content: flex-start !important;
+  font-size: 20px !important;
+  font-weight: 500 !important;
+  line-height: 26px !important;
+  gap: 8px !important;
+  height: 26px !important;
+}
+
+/* 标题组自己也是 justify-content:center，父级改了它不改，文字仍然居中。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> span > [data-slot="conversation.hero.brand.mark"]) > span {
+  justify-content: flex-start !important;
+}
+
+/* 「预览版」徽标：宿主把它挂在标题组第二个 span 上（第一个 span 是标题文本）。
+   它没有 data-*、没有 aria-*，只能按下标取。藏在 claude 构图里是必要的 ——
+   标题左对齐之后，一枚灰色小徽标紧跟在 20px 标题后面会把标题读成
+   「探索未至之境 预览版」一句话，而不是一个 logo + 一个标题。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> span > [data-slot="conversation.hero.brand.mark"]) > span > span:nth-child(2) {
+  display: none !important;
+}
+
+/* ----------------------------------------------------------------------------
+   H0.2 logo 只锁高度
+   ----------------------------------------------------------------------------
+   写成 height:21px + width:auto。**不要写成 21px x 21px**：这枚 logo 的
+   viewBox 是 23.16 x 17.04（宽高比 1.36），钉成正方形会把它压扁成 28.5 -> 21。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  [data-slot="conversation.hero.brand.mark"] svg {
+  height: 21px !important;
+  width: auto !important;
+}
+
+/* ----------------------------------------------------------------------------
+   H0.3 内容列 720，标题 / 工作区 / 输入卡同宽同左缘
+   ----------------------------------------------------------------------------
+   seat 上这一个变量喂给三层（见文件头），所以只要它对了，三者自动对齐。
+   取值沿用 10-layout.css 的 --dsh-chat-user-width 同款 clamp，这样新会话页与
+   会话正文列是同一个度量，不是随手挑的 720。
+   -------------------------------------------------------------------------- */
+html[data-dsh-furina][data-dsh-furina-layout="on"]
+  [data-phase="hero"] [data-composer-seat] {
+  --dsh-composer-card-max-width: clamp(720px, 68ch, 900px);
+}
+
+/* 标题外层 root 的内边距 24 -> 16：720 列比原来的 752 窄 32，左右各留 16 才
+   和输入卡的 side-clearance 对上，否则标题会比输入卡再内缩 24px。
+   层数必须精确 —— 从 brand.mark 往上数：span(1) / headline(2) / stack(3) /
+   root(4)。写成 3 层拿到的就是 stack（那会把 headline 再挤窄一圈），
+   写成 5 层实测 0 命中（上面没有第 5 个 div）。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> div > div > span > [data-slot="conversation.hero.brand.mark"]) {
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}
+
+/* 工作区行（工作区切换 + Agent 预设）宿主自己就是 28px 高、13px/20px/500、
+   圆角 8 —— 尺寸已经是 claude 的规格，不重复声明。缺的只有三件：宽度跟着
+   720 列、左右内边距清零（宿主的 16/20 会让按钮比输入卡再内缩）、按钮描边。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> [data-slot="conversation.hero.workspace"]) {
+  max-width: clamp(720px, 68ch, 900px) !important;
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* 描边用 label-primary 12% 而不是 border-l2：后者是「容器边界」的语义，
+   这里是「可点的控件」，claude 侧写的就是 label-primary 12%。 */
+html[data-dsh-furina][data-dsh-furina-layout="on"] [data-phase="hero"]
+  div:has(> [data-slot="conversation.hero.workspace"]) > button {
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent) !important;
+}

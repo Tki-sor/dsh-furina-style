@@ -11,11 +11,15 @@
 html[data-dsh-furina] {
   /* ---- 品牌与墨色：两种表面模式下都可用的公共调色板 ---- */
   --fh-water-ink: #1d2539;
-  --fh-water-ink-soft: #3e4b6d;
-  --fh-water-mute: #5f6e93;
-  --fh-water-faint: #7c8bab;
+  --fh-water-ink-soft: #2d3650;
+  --fh-water-mute: #333b4e;
+  --fh-water-faint: #42495a;
 
-  --fh-brand: #4a5fa8;
+  /* 0.13.0：品牌色从 #4a5fa8 下沉到 #2a3660。原色压在白底上是 6.1:1，但
+     浅色插画背景最亮处实测 #a8b0c3，原色只有 2.77:1（对比度审计实测）。
+     #2a3660 对同一批最亮样本最差 4.55:1、对白 11.7:1，是唯一四项全过的候选。
+     暗色块另有硬编码 #7f96d2，不受这行影响。 */
+  --fh-brand: #2a3660;
   --fh-brand-hover: #5d74c4;
   --fh-brand-deep: #222b4d;
   --fh-brand-wash: #dce3f7;
@@ -264,6 +268,13 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
   --fh-brand-wash: #263353;
   --fh-pearl: #2c3a5e;
 
+  /* 0.13.0：--fh-brand 在浅色下被下沉到 #2a3660（见第 11-22 行），那是「压在
+     亮插画上的深墨」，用在暗底上会变成一块几乎看不见的深蓝。暗色段的文字
+     与品牌色本来就走各自硬编码的 --dsw-alias-*，只有流式光标、工具行水膜、
+     列表 marker 这几处装饰还在引用 --fh-brand，所以这里明确钉回 0.12.0 的
+     原值 —— 浅色下沉不该顺带改暗色的观感。 */
+  --fh-brand: #4a5fa8;
+
   --fh-canvas: #0c1220;
   --fh-surface-base: #101624;
   --fh-surface-1: #161f33;
@@ -292,7 +303,7 @@ html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
   --dsw-alias-label-primary: #dbe2f2;
   --dsw-alias-label-secondary: #a9b7d0;
   --dsw-alias-label-tertiary: #8b9cbc;
-  --dsw-alias-label-caption: #788bb4;
+  --dsw-alias-label-caption: #8fa0c8; /* 0.13.0：暗色下 #788bb4 压最暗底只有 4.64:1，抬到 #8fa0c8 得 6.06:1 */
   --dsw-alias-label-primary-dimmed: #dbe2f2f2;
   --dsw-alias-label-primary-inverted: #101624;
   --dsw-alias-label-primary-foreground: #101624;

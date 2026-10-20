@@ -1453,7 +1453,257 @@ pre        14px/24px     （不动 —— 代码块字号由用户设置里 code
 
 ---
 
-## 18. 版本之间
+## 18. 0.13.0：一屏纸的重心，与一层字压不压得住
+
+0.12.0 动的是字，这一版动的是**尺子**。两条线：
+
+1. **构图**：新会话那一屏还是宿主的「搜索页」形状（居中大标题 + 徽标 + 752 列），
+   而 claude 那一屏的重心在输入框上。
+2. **对比度**：浅色主题 + 插画背景下，16 个文本层里有 8 层低于 WCAG 4.5:1，
+   最差三层只有 2.35 / 2.46 / 2.61。
+
+第二条是这一版真正的主线 —— 它不是「有点淡」，是读不下去。
+
+### 18.1 先立规矩：这一版只碰两个文件的两类声明
+
+0.11.0 补边界、0.12.0 补字号，两版都在扩「选择器覆盖面」。这一版反过来收：
+
+- `06-hero.css`（新建，H0.1–H0.3）只管新会话那一屏的构图；
+- `00-tokens.css` 的公共调色板第一次做主题分流；
+- `30-surface.css` 只补注释（验算），不改规则；
+- `20-motion.css` 只修三条从来没命中过的选择器。
+
+不新增设置项，不改用户能调的滑块（`--fh-veil` 一个字都没动）。
+
+### 18.2 新会话页：为什么只改一个变量就够
+
+宿主三层宽度是**联动**的：
+
+```
+Dc7zOa_composerHero 宽 = card-max-width + 2 × side-clearance
+Hqq-bq_stack        宽 = min(100%, card-max-width)
+RlGAzG_card         宽 = min(100%, card-max-width)
+```
+
+所以在 `[data-composer-seat]` 上重声明 `--dsh-composer-card-max-width`，
+标题列 / 工作区行 / 输入卡会同时收窄并自动对齐 —— 不需要分别设宽。
+
+反过来做过一次：直接改 `composerStack` 宽度，实测得到
+「root 720 / stack 672 / card 688」，三者谁都不齐。**联动的宽度只能从联动
+的那个变量改。**
+
+取值必须写成裸 `clamp(720px, 68ch, 900px)`：
+
+```css
+/* 对：card 落 720 */
+--dsh-composer-card-max-width: clamp(720px, 68ch, 900px);
+
+/* 错：100% - 16px 先算成 736，最终 card 落 704 */
+--dsh-composer-card-max-width: min(calc(100% - 16px), clamp(720px, 68ch, 900px));
+```
+
+沿用 `10-layout.css` 的 `--dsh-chat-user-width` 同款 clamp，是为了让新会话页和
+会话正文列用**同一根尺子**，不是随手挑的 720。
+
+### 18.3 `:has()` 的层数问题：3 层、4 层、5 层各拿到什么
+
+hero 变体只是 class（`Dc7zOa_composerHero` / `RlGAzG_hero` / `Hqq-bq_headline`），
+没有 `data-*` 可判。整个 `06-hero.css` 只能从具名槽反查容器：
+
+```
+[data-slot="conversation.hero.brand.mark"]
+[data-slot="conversation.hero.workspace"]
+[data-slot="conversation.hero.workspace.directoryFlow"]
+[data-slot="conversation.hero.agentPreset"]
+[data-slot="conversation.hero.options"]
+```
+
+具名槽是跨版本契约（0.10.0 起最主要的一类锚点），所以不碰哈希类名。
+
+数层数时有两个坑：
+
+1. **不能把 `display: contents` 的槽本身数进去** —— 它的 rect 是 0，不是一个
+   盒。只能数它外面的真实 div。
+2. **层数必须精确**。从 `brand.mark` 往上数：
+
+```
+span(1) / headline(2) / stack(3) / root(4)
+```
+
+   - 写 4 层 `div:has(> div > div > span > [brand.mark])` → 拿到 root（对）
+   - 写 3 层 → 拿到 stack，会把 headline 再挤窄一圈（错）
+   - 写 5 层 → 实测 0 命中，上面没有第 5 个 div（错）
+
+实测（隔离实例 1570×871，hero 态）：
+
+```
+headline   559,350  720×26   20px/26px 500  justify-content: flex-start
+workspace  559,400  720×28   padding 0
+card       559,436  720×94   --dsh-composer-card-max-width: clamp(720px, 68ch, 900px)
+brand svg  559,352   29×21   徽标 display: none
+document.scrollWidth = document.clientWidth = 1570  （无横向溢出）
+```
+
+三者左缘 `x = 559`、宽 `720`，同一条竖线。
+
+### 18.4 logo 只能锁高度
+
+```css
+[data-slot="conversation.hero.brand.mark"] svg { height: 21px; width: auto; }
+```
+
+这枚 svg 的 viewBox 是 **23.16 × 17.04**（宽高比 1.36）。写成 `21px × 21px`
+会把它从 28.5 压成 21 —— 横向被挤扁。锁高度、宽自动，是唯一不改变比例的写法。
+
+### 18.5 浅色可读性：根因不是「颜色淡」，是「没有对照物」
+
+先把根因摆清楚，否则改法看起来像随手调色。
+
+`30-surface.css:65-79` 把对话区中间列与底行设成
+`background: transparent !important` —— 插画**直透正文区**。浅色的水膜是
+`rgb(247 250 255 / 0.4)`，压在插画最亮处几乎不改变亮度：
+
+```
+插画最亮样本 #c6b4bc  ← 水膜 0.4 白色 → 合成后仍然 #c6b4bc 附近
+```
+
+所以**浅色下遮罩救不了对比度**。12 个文本层里有 7 层的好坏，取决于背后那一片
+插画有多亮 —— 而插画是用户自己选的。
+
+前景 token（`00-tokens.css:119-122`）仍然按「水色画布 `#eef2fa`」设计，
+画布被插画替换之后，它们就失去了对照物。
+
+两条路摆在这儿：
+
+| 路 | 做法 | 问题 |
+| --- | --- | --- |
+| A | 把水膜浓度 `--fh-veil` 0.4 → 0.62 | 所有小字层一次性到 6.4–8.2:1，**代价是插画变淡** —— 把用户选的背景当成错误来修 |
+| B | 前景色往下沉 | 层次压缩，但不动用户的画 |
+
+选 B。而且 A 本身也救不全：`--fh-water-faint: #7c8bab` 压在**纯白**上只有
+`3.42:1`，token 自身就不达标 —— 拉满`--fh-veil` 到 1.0 也只有 3.42。换什么
+背景都没用，那一档必须单独改。
+
+### 18.6 四个 token 的实测账
+
+```css
+/* 00-tokens.css:13-19 公共调色板（只被浅色 body 规则引用，暗色块是硬编码 hex） */
+--fh-water-ink-soft: #2d3650;   /* 原 #3e4b6d */
+--fh-water-mute:     #333b4e;   /* 原 #5f6e93 */
+--fh-water-faint:    #42495a;   /* 原 #7c8bab */
+--fh-brand:          #2a3660;   /* 原 #4a5fa8 */
+```
+
+| 层 | 原最差 | 新值 | 依据 |
+| --- | --- | --- | --- |
+| label-secondary（模型行） | 3.41 | 4.73 | 压 `#9fa2b2` |
+| label-tertiary（工具行） | 2.05 | 4.52 | 压 `#9aa5bd` |
+| label-caption（「High」） | 1.74 | 4.58 | 压 `#c6b4bc`；对白 9.0 |
+| 底部统计 tok/s | 3.54 | 4.87 | 压 `#d3d8e0` |
+| 链接 | 2.77 | 4.55 | 压 `#a8b0c3`；对白 11.7 |
+| 标签 pill | 2.34 | 4.55 | 压 `#9ba1b7` |
+| 缓存命中行 | 2.21 | 4.87 | 压 `#a2acbb` |
+| 侧栏分组 / 时间 | 3.56 | 4.49–4.73 | 压 `#edf1fb` |
+
+**8 层逐层复算全部 ≥ 4.5:1。** 残余：插画极暗的两处（`#9da3af` 一带）
+新 faint 仍在 3.5–3.7，那已经不归前景管 —— 那是插画本身的亮度。
+
+代价写在明处：**浅色的明度层次从 3 档压到 2 档**。这是「不淡就读不了」的
+必然结果，不是没注意到。
+
+### 18.7 一次自己引入、又自己修掉的回归
+
+公共调色板声明在 `html[data-dsh-furina]` 上，暗色块是它的**后代** ——
+于是浅色一改，暗色跟着动。
+
+改完实测：
+
+```
+暗色 --fh-brand = #2a3660   ← 应该是 #4a5fa8
+```
+
+`#2a3660` 在深底上是「一块几乎看不见的深蓝」。受影响的是那几处还引用
+`--fh-brand` 的**装饰**：流式光标、工具行水膜、`li::marker`。
+
+修法是在暗色块里显式钉回：
+
+```css
+html[data-dsh-furina][data-dsh-furina-surfaces="own"] body[data-ds-dark-theme] {
+  --fh-brand: #4a5fa8;   /* 钉回 0.12.0 的原值 */
+}
+```
+
+理由：暗色段的文字与品牌色本来就走各自硬编码的 `--dsw-alias-*`，只有那几处
+装饰还在引用 `--fh-brand`，所以浅色下沉不该顺带改暗色的观感。
+
+这条教训值得单独记一句：**公共 token 放在主题块外面，等于给两个主题装了一根
+共用的轴 —— 动之前先想清楚另一头连着谁。** 复核实测：
+
+```
+dark   --fh-brand #4a5fa8   brand-primary #7f96d2
+light  --fh-brand #2a3660   brand-primary #2a3660   bg-base #f7f9fe
+```
+
+顺带把暗色唯一贴线的那一档抬起来：
+
+```css
+/* 00-tokens.css:303 暗色 */
+--dsw-alias-label-caption: #8fa0c8;   /* 原 #788bb4 */
+```
+
+中位 4.64 → 6.06，最差像素 3.26 → 4.26。只影响暗色。
+
+⚠️ 复核实测有一个读数陷阱：暗色覆写的作用域是
+`html[data-dsh-furina] body[data-ds-dark-theme]`，所以 `--fh-brand` **必须
+在 body（或它的后代）上读**。在 `document.documentElement` 上读永远得到
+浅色那份 `#2a3660` —— 第一次复验就是这么误判成「回归还在」的。实测同一个
+暗色状态下：
+
+```
+getComputedStyle(document.documentElement) --fh-brand → #2a3660   （html 自己的值）
+getComputedStyle(document.body)            --fh-brand → #4a5fa8   （真正继承下去的）
+```
+
+### 18.8 三条「写了、但从来没命中过」的动效选择器
+
+审查动效层时顺手量了命中数，三条规则都在 **0**：
+
+| 位置 | 旧写法 | 为什么从来没生效 | 修法 |
+| --- | --- | --- | --- |
+| M1 消息入场 | 给 `[data-slot="conversation.chat.node"]` 的**每个**子元素挂 `animation … both` | `animation-fill-mode: both` 在层叠里**高于普通声明**（动画填充值赢过普通声明），它把行尾操作条的 `opacity` 钉在最后一帧的 1，于是 `10-layout.css:149` 那条「hover 才出现」永远算不出 0。实测：操作条 opacity 恒为 1 | 加 `:not([data-turn-tail])` 排除行尾条 |
+| M3 思考态涟漪 | `[data-chat-flow-kind="turn-process"] [data-state="running"]` | turn-process 那个 flowItem 里**根本没有** `[data-state]` —— 孩子只有隐藏播报（`role=status`）和 `data-turn-process` 按钮。真正带 `data-state="running"` 的是思考块 `ReasoningRow` | `[data-variant="think"][data-state="running"] [data-disclosure-row] > span:first-child`，呼吸光挂到那枚 16px 的 leading 图标上（挂整行会溢到相邻行） |
+| M4 展开涌动 | `[data-expanded="true"]` | 宿主的写法是 `"data-expanded": expanded \|\| void 0` —— 折叠时**整条属性不存在**，不是 `"false"`。全页 0 个 `data-expanded` | 改成只判属性存在 `[data-expanded]` |
+
+M1 那条最有教学价值：**`animation-fill-mode` 不是「动画播放时」的事，它是
+一个持久的声明级覆盖**。给一个容器里的所有子元素挂 `both`，等于把它们的
+每一帧值都钉成最终值 —— 之后任何 `opacity` 状态切换都会失效。
+
+### 18.9 补的验算：`30-surface.css` 的注释此前只算了暗色
+
+那段注释原文只说「`#dbe2f2` 压在 `rgb(10 15 27 / .4)` 上约 9:1」。这一版补上：
+
+浅色的对照色是 `rgb(247 250 255 / .4)`，压在白底上几乎不改变亮度，所以
+**浅色下遮罩救不了对比度**；12 个文本层里有 7 层的对比度取决于插画亮度本身；
+结论是浅色可读性归 `--fh-water-*` 那一组 token 管，不归这里。
+
+注释的价值在于：下一个想「把水膜调浓一点」的人，会先看到这句话。
+
+### 18.10 验收：三条探针
+
+1. **hero 几何探针**（`cdp_file.js`）：进 hero 态后量 headline / workspace / card
+   的 `rect` 与 `font`，期望三者左缘相同、宽 720，且
+   `document.scrollWidth === document.clientWidth`。
+2. **双主题 token 探针**：切浅色（`data-ds-theme-source=light` +
+   `color-scheme:light` + `body.removeAttribute('data-ds-dark-theme')`）读四个
+   `--fh-water-*` 与 `--fh-brand`；切回暗色必须读到 `--fh-brand: #4a5fa8`。
+3. **对比度复算**：从审计报告的「旧色 + 旧最差比值」反解背景亮度，再用新色
+   算回去，8 层 ≥ 4.5 才算过。
+
+三条都过之后才动文档与版本号。
+
+---
+
+## 19. 版本之间
 
 
 | 版本 | 主题 |
@@ -1472,4 +1722,5 @@ pre        14px/24px     （不动 —— 代码块字号由用户设置里 code
 | 0.10.0 | 输入区按 claude 几何重排（工具行 28px 单行、+ 与发送键进卡面）；设置页去卡片化；窗口 chrome（dock 开关 / 侧栏账号行 / 账号菜单） |
 | 0.11.0 | 正文容器补发丝外框（代码块 / 宽表格 / 我发出的附件卡）；焦点环收窄到真焦点语义，并跟住宿主的指针模态契约 |
 | 0.12.0 | 排版轴：标题阶梯 21/18/16/14/13/12（宿主后两级塌平）、显式间距标尺、行内代码回到整数像素、断行质量 |
+| 0.13.0 | 新会话页按 claude 构图收拢（标题 20/26 左对齐、720 列、三者同左缘）；浅色小字可读性修复（四个公共墨色下沉、品牌色 `#2a3660`、暗色品牌色钉回）；修掉三条从未命中的动效选择器 |
 

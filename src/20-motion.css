@@ -29,12 +29,21 @@
   }
 }
 
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-slot="conversation.chat.node"] > * {
+/* 0.13.0：排除 [data-turn-tail]（行尾操作条）。
+   它的显隐是 10-layout.css:149 用 opacity 做的，而 animation 的 fill-mode
+   在层叠里**高于普通声明** —— animation-fill-mode: both 会把 opacity 钉在
+   最后一帧的 1，于是那条「hover 才出现」的规则永远算不出 0。
+   实测：操作条 opacity 恒为 1，只有把这条动画摘掉才回到 0。 */
+html[data-dsh-furina][data-dsh-furina-motion="on"]
+  [data-slot="conversation.chat.node"]
+  > *:not([data-turn-tail]) {
   animation: fh-rise-in var(--fh-dur-enter) var(--fh-ease-settle) both;
 }
 
 /* 宿主自己会做首屏挂载，别让历史消息集体飘一遍：只给最后一条 */
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-slot="conversation.chat.node"] > *:not(:last-child) {
+html[data-dsh-furina][data-dsh-furina-motion="on"]
+  [data-slot="conversation.chat.node"]
+  > *:not([data-turn-tail]):not(:last-child) {
   animation: none;
 }
 
@@ -68,8 +77,14 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [data-streaming]::after {
 /* ---------------------------------------------------------------------------
    M3. 涟漪：思考态
    ---------------------------------------------------------------------------
-   宿主自带的忙碌标记在 [data-chat-flow-kind="turn-process"] / [data-state=running]。
-   我们只在它外面叠一圈缓慢呼吸的径向光，不替换它的图标。
+   0.13.0 修正锚点。原来写的是 [data-chat-flow-kind="turn-process"] [data-state="running"]，
+   实测**一个都命中不了**：turn-process 那个 flowItem 里根本没有 [data-state]
+   （它的孩子只有 role=status 的隐藏播报和 data-turn-process 按钮）；真正带
+   data-state="running" 的是思考块 ReasoningRow —— 宿主源码里那句
+   "data-state": running ? "running" : "ok" 就写在这个组件上。
+
+   所以锚改成 [data-variant="think"][data-state="running"]，并把呼吸光挂到
+   它那枚 16px 的 leading 图标上（而不是整行）：整行 inset -6px 会溢到相邻行。
    ------------------------------------------------------------------------- */
 @keyframes fh-breathe {
   0%,
@@ -83,11 +98,17 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [data-streaming]::after {
   }
 }
 
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-process"] [data-state="running"] {
+html[data-dsh-furina][data-dsh-furina-motion="on"]
+  [data-variant="think"][data-state="running"]
+  [data-disclosure-row]
+  > span:first-child {
   position: relative;
 }
 
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-process"] [data-state="running"]::before {
+html[data-dsh-furina][data-dsh-furina-motion="on"]
+  [data-variant="think"][data-state="running"]
+  [data-disclosure-row]
+  > span:first-child::before {
   content: "";
   position: absolute;
   inset: -6px;
@@ -106,6 +127,11 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-pr
    ---------------------------------------------------------------------------
    宿主用 data-expanded 表达展开态，展开的是 grid-template-rows 还是高度由它
    自己决定。这里只加「内容出现时的一点位移」，不改尺寸计算。
+
+   0.13.0：选择器从 [data-expanded="true"] 改成 [data-expanded]。宿主的写法是
+   "data-expanded": expanded || void 0 —— 展开时值是 "true"，但折叠时是
+   **整条属性不存在**，所以 [data-expanded="true"] 在静态页永远打不中（实测
+   全页 0 个 data-expanded）。改成只判属性存在，含义不变、覆盖面变大。
    ------------------------------------------------------------------------- */
 @keyframes fh-unfold {
   from {
@@ -118,7 +144,7 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [data-chat-flow-kind="turn-pr
   }
 }
 
-html[data-dsh-furina][data-dsh-furina-motion="on"] [data-expanded="true"] > * {
+html[data-dsh-furina][data-dsh-furina-motion="on"] [data-expanded] > * {
   animation: fh-unfold var(--fh-dur-surface) var(--fh-ease-glide) both;
 }
 
