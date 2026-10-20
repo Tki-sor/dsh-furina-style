@@ -1,0 +1,140 @@
+/* 0.14.0 — task width and one shared footer row.
+ * Keep real card/row boxes: the host observes their geometry to compact controls.
+ * Subgrid shares three columns through root > card > row; the statistics dock
+ * occupies the middle column of the SAME root row, bottom-aligned with controls.
+ * No React nodes are moved and no fixed permission/model widths are assumed.
+ */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-testid="todo-panel"] {
+  width: calc(100% - 2 * var(--dsh-composer-side-clearance, 16px)) !important;
+  max-width: var(--dsh-composer-card-max-width) !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  div:has(> [data-composer-card]) {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: [notice] auto [composer] auto;
+  column-gap: 8px;
+  width: calc(100% - 2 * var(--dsh-composer-side-clearance, 16px));
+  max-width: var(--dsh-composer-card-max-width);
+  box-sizing: border-box;
+  padding: 0 0 4px !important;
+  margin-inline: auto;
+  align-items: stretch;
+  container: fh-composer / inline-size;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] {
+  display: grid !important;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  grid-row: composer;
+  min-width: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > *,
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > [data-slot="conversation.input.attachments"] > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > [class*="_row"] {
+  display: grid !important;
+  grid-template-columns: subgrid;
+  padding: 0 !important;
+  container-type: normal !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > [class*="_row"] > [class*="_tools"] {
+  grid-column: 1;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > [class*="_row"] > [class*="_trailing"] {
+  grid-column: 3;
+  justify-self: end;
+  margin-left: 0 !important;
+}
+
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-dock] {
+  grid-column: 2;
+  grid-row: composer;
+  align-self: end;
+  justify-self: stretch;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 28px;
+  padding: 0 !important;
+  gap: 4px !important;
+  z-index: 1;
+}
+
+/* Notices stay above the card rather than being auto-placed beside it. */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  div:has(> [data-composer-card]) > [class*="_notice"] {
+  grid-column: 1 / -1;
+  grid-row: notice;
+}
+
+/* Activity replaces the selectors while running. Give it the remaining space,
+ * keep statistics alongside it, and leave native [hidden] controls hidden. */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  div:has(> [data-composer-card] > [class*="_row"] > [class*="_tools"][hidden]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-card] > [class*="_row"] > [class*="_trailingActive"] {
+  grid-column: 1;
+  justify-self: stretch;
+  width: 100%;
+}
+
+/* Native pills already ellipsize their labels. Allow the middle track to shrink
+ * rather than pushing selectors outside the input edges on narrow panes. */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+  [data-composer-stat] {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Compact only dialog buttons to icons (their aria-label/dialog keeps values).
+ * Static PlainPills retain their text and native ellipsis; never hide that label. */
+@container fh-composer (width <= 560px) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-stat] {
+    min-width: 28px;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-stat]:has(> button) {
+    flex: none;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-stat] > :is(button, span) {
+    gap: 0;
+    min-width: 28px;
+    min-height: 28px;
+    padding-inline: 4px;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-composer-stat] > button [class*="_label"] {
+    display: none;
+  }
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-slot="conversation.input.model"] button {
+    max-width: 35cqw;
+  }
+}
+
+@container fh-composer (width <= 360px) {
+  html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"]
+    [data-slot="conversation.input.permission"] :is([class*="_triggerLabel"], [class*="_chevron"]) {
+    display: none;
+  }
+}
