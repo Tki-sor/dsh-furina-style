@@ -64,7 +64,7 @@ function check(g) {
   }
   const controls = [g.permission, ...g.pills, g.model, ...(g.effort ? [g.effort] : [])].sort((a, b) => a.x - b.x);
   for (let i = 1; i < controls.length; i++) {
-    assert.ok(controls[i - 1].x + controls[i - 1].width <= controls[i].x + 1, 'Footer controls overlap');
+    assert.ok(controls[i - 1].x + controls[i - 1].width <= controls[i].x + 1, 'Footer controls overlap: ' + JSON.stringify(controls));
   }
   for (const r of controls) {
     assert.ok(r.x >= g.input.x - 1 && r.x + r.width <= g.input.x + g.input.width + 1, 'Footer escapes input edges');

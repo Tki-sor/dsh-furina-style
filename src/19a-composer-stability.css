@@ -1,0 +1,86 @@
+/* Stable geometry is independent of model/provider label lengths.
+ * Reserve tracks from the input width, not the controls' intrinsic widths.
+ * The model ellipsizes in its own track; it cannot borrow statistics space.
+ */
+html[data-dsh-furina][data-dsh-furina-layout="on"][data-dsh-furina-composer="framed"] {
+  [data-goal-bar] {
+    width: calc(100% - 2 * var(--dsh-composer-side-clearance, 16px)) !important;
+    max-width: var(--dsh-composer-card-max-width) !important;
+    margin-inline: auto !important;
+    box-sizing: border-box;
+  }
+  [data-goal-bar] > :first-child {
+    width: 100% !important;
+    max-width: none !important;
+    margin-inline: 0 !important;
+    box-sizing: border-box;
+  }
+  div:has(> [data-composer-card]),
+  div:has(> [data-composer-card] > [class*="_row"] > [class*="_tools"][hidden]) {
+    grid-template-columns: clamp(28px, 12%, 88px) minmax(0, 1fr) clamp(136px, 38%, 340px);
+  }
+  [data-composer-dock] {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: center;
+    justify-content: stretch !important;
+  }
+  [data-composer-stat] {
+    width: 100%;
+    min-width: 0;
+  }
+  [data-composer-stat="activity"] { grid-column: 1; }
+  [data-composer-stat="usage"] { grid-column: 2; }
+  [data-composer-stat] > :is(button, span) { max-width: 100%; }
+  [data-composer-card] > [class*="_row"] > [class*="_tools"],
+  [data-composer-card] > [class*="_row"] > [class*="_trailing"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  [data-composer-card] [class*="_standardControls"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  [data-composer-card] [class*="_right"] {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
+  .fh-model-controls[data-ready] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .fh-model-controls button.fh-model-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  [data-composer-card] [class*="_modes"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  [data-slot="conversation.input.permission"] > span {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  [data-slot="conversation.input.model"] button,
+  [data-slot="conversation.input.permission"] button {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+  /* Native activity replaces model controls; keep it in their reserved track.
+   * Reusing column 1 would clip queue actions to the narrow permission width. */
+  [data-composer-card] > [class*="_row"] > [class*="_trailingActive"] {
+    grid-column: 3;
+    padding-right: 0 !important;
+    overflow: hidden;
+  }
+}

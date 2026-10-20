@@ -17,6 +17,8 @@ function FurinaReadyModelControls({ directory, available }) {
   const [query, setQuery] = React.useState('');
   const [failure, setFailure] = React.useState('');
   const [draftIndex, setDraftIndex] = React.useState(null);
+  const [moreModels, setMoreModels] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
   const [enabled, setEnabled] = React.useState(false);
   const [locked, setLocked] = React.useState(true);
   const [position, setPosition] = React.useState({ visibility: 'hidden' });
@@ -95,7 +97,14 @@ function FurinaReadyModelControls({ directory, available }) {
       const roomBelow = Math.max(0, window.innerHeight - below - 8);
       const up = roomAbove >= Math.min(box.height, 200) || roomAbove >= roomBelow;
       const height = Math.min(box.height, up ? roomAbove : roomBelow);
-      setPosition({ left: Math.max(8, Math.min(rect.right - box.width, window.innerWidth - box.width - 8)), top: up ? Math.max(8, above - height) : below, maxHeight: Math.max(40, up ? roomAbove : roomBelow), visibility: 'visible' });
+      const left = Math.max(8, Math.min(rect.right - box.width, window.innerWidth - box.width - 8));
+      const top = up ? Math.max(8, above - height) : below;
+      const submenu = dialog.current.querySelector('.fh-model-submenu');
+      const submenuWidth = submenu?.offsetWidth ?? 288;
+      const submenuHeight = Math.min(submenu?.offsetHeight ?? 0, window.innerHeight - 16);
+      const submenuLeft = left < submenuWidth + 12 && window.innerWidth - left - box.width > left;
+      const submenuX = submenuLeft ? left + box.width + 4 : left - submenuWidth - 4;
+      setPosition({ left, top, maxHeight: Math.max(40, up ? roomAbove : roomBelow), '--fh-submenu-x': Math.max(8, Math.min(submenuX, window.innerWidth - submenuWidth - 8)) + 'px', '--fh-submenu-y': Math.max(8, Math.min(top + height - submenuHeight, window.innerHeight - submenuHeight - 8)) + 'px', visibility: 'visible' });
     };
     place();
     const resize = new ResizeObserver(place);
@@ -113,7 +122,7 @@ function FurinaReadyModelControls({ directory, available }) {
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', scroll, true);
     };
-  }, [pane]);
+  }, [pane, moreModels]);
   React.useLayoutEffect(() => {
     if (pane === null || position.visibility !== 'visible' || dialog.current === null) return;
     const focus = dialog.current.querySelector('input:not(:disabled)') || dialog.current.querySelector('button:not(:disabled)');
@@ -123,6 +132,8 @@ function FurinaReadyModelControls({ directory, available }) {
     owner.current = event.currentTarget;
     setPosition({ visibility: 'hidden' });
     setQuery('');
+    setMoreModels(false);
+    setDragging(false);
     setFailure('');
     setPane((previous) => previous === kind ? null : kind);
   };
@@ -146,12 +157,20 @@ function FurinaReadyModelControls({ directory, available }) {
   };
   const keyDown = (event) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
-    const controls = [...dialog.current.querySelectorAll('input:not(:disabled),button:not(:disabled)')];
+    const controls = [...dialog.current.querySelectorAll('input:not(:disabled),button:not(:disabled)')]
+      .filter((element) => element.getClientRects().length > 0);
     const at = controls.indexOf(document.activeElement);
     if (event.key === 'Tab') {
       if (controls.length === 0) return;
       if (event.shiftKey && at <= 0) { event.preventDefault(); controls.at(-1).focus(); }
       else if (!event.shiftKey && at === controls.length - 1) { event.preventDefault(); controls[0].focus(); }
+    } else if (pane === 'model' && event.key === 'ArrowRight' && document.activeElement?.classList.contains('fh-model-more')) {
+      event.preventDefault();
+      setMoreModels(true);
+    } else if (pane === 'model' && event.key === 'ArrowLeft' && moreModels) {
+      event.preventDefault();
+      setMoreModels(false);
+      dialog.current.querySelector('.fh-model-more')?.focus();
     } else if (pane === 'model' && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
       event.preventDefault();
       controls[(at + (event.key === 'ArrowDown' ? 1 : controls.length - 1)) % controls.length]?.focus();
@@ -159,35 +178,75 @@ function FurinaReadyModelControls({ directory, available }) {
   };
   if (!ready) return null;
   const error = failure || state.error;
+  // The reference's first-level menu is a short provider list plus the active
+  // model; other host groups live in the adjoining More models surface.
+  const primary = groups.find((group) => group.models.length > 0);
+  const remaining = groups.filter((group) => group !== primary && group.models.length > 0);
+  const searching = query.trim() !== '';
+  const matches = (model) => model.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+  const check = (selected) => h('svg', { className: 'fh-model-check', viewBox: '0 0 16 16', 'aria-hidden': true, 'data-selected': selected ? '' : undefined }, h('path', { d: 'm3 8 3 3 7-7', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }));
+  const option = (group, model, submenu = false) => {
+    const selected = state.current?.provider === group.id && state.current?.model === model.id;
+    return h('button', { key: model.id, type: 'button', className: 'fh-model-option', disabled: locked || busy, 'aria-pressed': selected,
+      onClick: () => pick({ provider: group.id, model: model.id, ...(selected && state.current.reasoningEffort !== undefined ? { reasoningEffort: state.current.reasoningEffort } : model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }) }, true),
+    }, h('span', { className: 'fh-model-copy' },
+      h('span', { className: 'fh-model-name' }, model.name),
+      !submenu && typeof model.description === 'string' && model.description ? h('span', { className: 'fh-model-desc' }, model.description) : null
+    ), check(selected));
+  };
+  const section = (group, models, submenu = false) => h('section', { key: group.id, className: 'fh-model-group' },
+    h('div', { className: submenu ? 'fh-model-group-row' : 'fh-model-rule' }, h('span', { className: 'fh-model-group-label' }, group.name)),
+    ...[...models].sort((a,b)=>a.id.localeCompare(b.id)).map((model) => option(group, model, submenu))
+  );
   const popup = pane === null ? null : h('div', {
     ref: dialog, id, role: 'dialog', 'aria-label': pane === 'model' ? '选择模型' : '推理强度',
-    'aria-busy': busy, className: 'fh-control-popover', style: position, onKeyDown: keyDown,
+    'aria-busy': busy, className: 'fh-control-popover', 'data-pane': pane, 'data-searching': searching ? '' : undefined, 'data-more': moreModels && !searching ? '' : undefined,
+    style: position, onKeyDown: keyDown,
   },
-    h('button', { type: 'button', className: 'fh-control-close', onClick: () => close(), 'aria-label': '关闭' }, '×'),
     error ? h('div', { role: 'alert', className: 'fh-control-error' }, String(error)) : null,
     pane === 'model' ? h(React.Fragment, null,
-      h('input', { type: 'search', className: 'fh-model-search', placeholder: '搜索模型', 'aria-label': '搜索模型', value: query, onChange: (event) => setQuery(event.target.value) }),
-      ...groups.map((group) => {
-        const models = group.models.filter((model) => model.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-        if (models.length === 0) return null;
-        return h('section', { key: group.id, className: 'fh-model-group' }, h('div', { className: 'fh-model-group-label' }, group.name), ...models.map((model) => {
-          const selected = state.current?.provider === group.id && state.current?.model === model.id;
-          return h('button', { key: model.id, type: 'button', className: 'fh-model-option', disabled: locked || busy, 'aria-pressed': selected,
-            onClick: () => pick({ provider: group.id, model: model.id, ...(selected && state.current.reasoningEffort !== undefined ? { reasoningEffort: state.current.reasoningEffort } : model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }) }, true),
-          }, model.name, selected ? ' ✓' : '');
-        }));
-      }),
-      choices.some(({ model }) => model.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ? null : h('p', null, '没有匹配的模型')
-    ) : h(React.Fragment, null,
-      h('div', { className: 'fh-effort-head' }, '推理强度 ', h('strong', null, effortLabel)),
+      // Keep type-to-filter and its focus/keyboard contract without adding a
+      // permanent search/dialog header absent from the installed reference.
+      h('input', { type: 'search', className: 'fh-model-search', placeholder: '输入以搜索模型', 'aria-label': '搜索模型', value: query, onChange: (event) => setQuery(event.target.value) }),
+      h('div', { className: 'fh-model-body' },
+        ...(searching ? groups : primary ? [primary] : []).map((group) => {
+          const models = group.models.filter(matches);
+          return models.length > 0 ? section(group, models) : null;
+        }),
+        !searching && current && current.group !== primary ? section(current.group, [current.model]) : null,
+        searching && !choices.some(({ model }) => matches(model)) ? h('p', { className: 'fh-model-empty' }, '没有匹配的模型') : null
+      ),
+      !searching && remaining.length > 0 ? h('div', { className: 'fh-model-footer' },
+        h('div', { className: 'fh-model-divider' }),
+        h('button', { type: 'button', className: 'fh-model-more', 'aria-expanded': moreModels, 'aria-controls': moreModels ? id + '-more' : undefined, disabled: locked || busy,
+          onClick: () => setMoreModels((previous) => window.innerWidth <= 620 ? !previous : true), onMouseEnter: () => { if (window.innerWidth > 620) setMoreModels(true); },
+        }, h('span', null, '更多模型'), h('svg', { viewBox: '0 0 16 16', 'aria-hidden': true }, h('path', { d: 'm6 4 4 4-4 4', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 })))
+      ) : null,
+      moreModels && !searching ? h('div', { id: id + '-more', className: 'fh-model-submenu', 'aria-label': '更多模型' },
+        ...remaining.map((group) => section(group, group.models, true))
+      ) : null
+    ) : h('div', { className: 'fh-effort', 'data-dragging': dragging ? '' : undefined, 'data-apex': levels.length > 1 && shownIndex === levels.length - 1 ? '' : undefined,
+        style: { '--fh-effort-progress': levels.length < 2 ? 1 : shownIndex / (levels.length - 1) },
+      },
+      h('div', { className: 'fh-effort-head' }, h('span', { className: 'fh-effort-label' }, '推理强度'), h('span', { className: 'fh-effort-value', key: effortLabel }, effortLabel)),
       advertisedIndex < 0 && effort !== undefined ? h('p', { className: 'fh-effort-note' }, '当前强度未列入可选档位；调整滑条将选择新档位。') : null,
-      h('input', { type: 'range', className: 'fh-effort-range', min: 0, max: Math.max(0, levels.length - 1), step: 1, value: shownIndex, disabled: locked || busy || levels.length < 2,
-        'aria-label': '推理强度', 'aria-valuetext': effortLabel,
-        style: { '--fh-effort-fill': (levels.length < 2 ? 0 : shownIndex / (levels.length - 1) * 100) + '%' },
-        onChange: (event) => setDraftIndex(Number(event.target.value)),
-        onPointerUp: commitEffort, onKeyUp: commitEffort, onBlur: commitEffort,
-      }),
-      h('div', { className: 'fh-effort-ends' }, h('span', null, levels[0]?.name), h('span', null, levels.at(-1)?.name))
+      h('div', { className: 'fh-effort-ends', 'aria-hidden': true }, h('span', null, '更快'), h('span', null, '更智能')),
+      h('div', { className: 'fh-effort-track', 'data-disabled': locked || busy || levels.length < 2 ? '' : undefined },
+        h('div', { className: 'fh-effort-fill', 'aria-hidden': true }),
+        h('div', { className: 'fh-effort-ticks', 'aria-hidden': true }, ...levels.map((level, at) => h('span', { key: at, className: 'fh-effort-tick', style: { '--fh-effort-tick': levels.length < 2 ? 1 : at / (levels.length - 1) } }))),
+        h('div', { className: 'fh-effort-matrix', 'aria-hidden': true }, ...Array.from({ length: 320 }, (_, at) => h('span', { key: at, style: { '--fh-effort-flash-delay': (at * 37 % 29) * -0.14 + 's', '--fh-effort-tone': (at * 7 % 8 + 1) / 8 } }))),
+        h('div', { className: 'fh-effort-knob', 'aria-hidden': true }),
+        // Native semantics only: all visible rail/ticks/fill/knob are custom DOM.
+        // Preview on input; retain the host's single release/keyup/blur commit.
+        h('input', { type: 'range', className: 'fh-effort-range', min: 0, max: Math.max(0, levels.length - 1), step: 1, value: shownIndex, disabled: locked || busy || levels.length < 2,
+          'aria-label': '推理强度', 'aria-valuetext': effortLabel,
+          onChange: (event) => setDraftIndex(Number(event.target.value)),
+          onPointerDown: (event) => { setDragging(true); event.currentTarget.setPointerCapture(event.pointerId); },
+          onPointerUp: (event) => { setDragging(false); commitEffort(event); },
+          onPointerCancel: () => { setDragging(false); setDraftIndex(null); },
+          onLostPointerCapture: () => setDragging(false), onKeyUp: commitEffort, onBlur: commitEffort,
+        })
+      )
     )
   );
   return h('div', { ref: anchor, className: 'fh-model-controls', 'data-ready': '', 'aria-busy': busy },

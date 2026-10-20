@@ -3,7 +3,8 @@
  * Fixtures, portal listeners, init hook and viewport are removed in finally.
  */
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const endpoint = process.env.DSH_CDP_URL || 'http://127.0.0.1:9333';
@@ -58,7 +59,7 @@ function mountFixture(source, css) {
   const {Component, marker} = new Function('React', 'h', 'ReactDOM', source + ';return {Component:FurinaModelControls,marker:installPermissionMarker}') (React, React.createElement, ReactDOM);
   const listeners = new Set(), calls = [];
   let snapshot = {status:'ready', pending:null, error:null, retainedEffort:null, current:{provider:'test-provider',model:'alpha'}, groups:[{id:'test-provider',name:'Fixture provider',models:[
-    {id:'alpha',name:'Deepseek-V4.1-Flash · x0.11',reasoning:{efforts:[{id:'test-low',name:'Low'},{id:'test-high',name:'High'},{id:'provider-custom',name:'Custom'}]}},
+    {id:'alpha',name:'Deepseek-V4.1-Flash · x0.11',description:'Balanced general-purpose reasoning',reasoning:{efforts:[{id:'test-low',name:'Low'},{id:'test-high',name:'High'},{id:'provider-custom',name:'Custom'}]}},
     {id:'plain',name:'No reasoning model'},
   ]}]};
   const publish = patch => { snapshot={...snapshot,...patch}; for(const fn of listeners) fn(); };
@@ -70,7 +71,7 @@ function mountFixture(source, css) {
   const host = document.createElement('span'); host.id='fh-controls-fixture'; host.style.display='contents';
   document.querySelector('[data-slot="conversation.input.right"]').append(host);
   const style=document.createElement('style');
-  style.textContent=css+'\n.fh-model-controls:not(#fh-controls-fixture .fh-model-controls){display:none!important}';document.head.append(style);
+  style.textContent=css+'\n.fh-model-controls:not(#fh-controls-fixture .fh-model-controls){display:none!important}#VideoTogetherWrapper{display:none!important}';document.head.append(style);
   window.__fhFixtureQuery=selector=>{
     const inline=host.querySelector(selector);if(inline)return inline;
     for(const trigger of host.querySelectorAll('[aria-controls]')){
@@ -85,6 +86,14 @@ function mountFixture(source, css) {
   const render = props => root.render(React.createElement(Component, {directory,available:true,...props}));
   window.__fhControlFixture={calls,publish,snapshot:()=>snapshot,render,fail:false,dispose(){root.unmount();host.remove();style.remove();unmark();native.disabled=wasDisabled;delete window.__fhFixtureQuery;}};
   render();
+}
+async function capturePanel(name) {
+  if (!process.env.DSH_TEST_PREVIEW_DIR) return;
+  await mkdir(process.env.DSH_TEST_PREVIEW_DIR, {recursive:true});
+  await evaluate('Promise.all(window.__fhFixtureQuery(".fh-control-popover").getAnimations({subtree:true}).filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})))');
+  const clip=await evaluate(`(()=>{const panel=window.__fhFixtureQuery('.fh-control-popover');const bounds=[panel,...panel.querySelectorAll('.fh-model-submenu')].map(e=>e.getBoundingClientRect());const x=Math.max(0,Math.min(...bounds.map(b=>b.x))-12),y=Math.max(0,Math.min(...bounds.map(b=>b.y))-12);return {x,y,width:Math.min(innerWidth-x,Math.max(...bounds.map(b=>b.right))-x+12),height:Math.min(innerHeight-y,Math.max(...bounds.map(b=>b.bottom))-y+12),scale:1};})()`);
+  const image=await send('Page.captureScreenshot',{format:'png',clip});
+  await writeFile(join(process.env.DSH_TEST_PREVIEW_DIR,name+'.png'),Buffer.from(image.data,'base64'));
 }
 let identifier;
 try {
@@ -106,12 +115,52 @@ try {
   })`);
   assert.ok(await evaluate('Boolean(window.__fhTestReactDOM)'), 'The isolated plugin did not expose React');
   const source = await readFile(new URL('../src/composer-controls.js', import.meta.url), 'utf8');
-  const css = await readFile(new URL('../src/19-composer-controls.css', import.meta.url), 'utf8');
+  const css = (await Promise.all(['19-composer-controls.css','19a-composer-stability.css'].map(file => readFile(new URL('../src/' + file, import.meta.url), 'utf8')))).join('\n');
   await evaluate('(' + mountFixture.toString() + ')(' + JSON.stringify(source) + ',' + JSON.stringify(css) + ')'); await settle();
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-model-button").disabled'), false);
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-effort-button").textContent'), 'Default');
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-slot="conversation.input.model"]')).display`), 'none');
   for (const extra of [[], ['--plain']]) execFileSync(process.execPath, [fileURLToPath(new URL('./check-composer-layout.mjs', import.meta.url)), '--matrix', ...extra], {stdio:'inherit'});
+  execFileSync(process.execPath, [fileURLToPath(new URL('./check-composer-stability.mjs', import.meta.url)), '--matrix'], {stdio:'inherit'});
+  for (const width of [1570, 400]) {
+    const before = await evaluate('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})');
+    try {
+      await send('Emulation.setDeviceMetricsOverride', {width,height:950,deviceScaleFactor:1,mobile:false});
+      await settle();
+      const active = await evaluate(
+        '(' + (async () => {
+          const card=document.querySelector('[data-composer-card]');
+          const row=card.querySelector('[class*="_row"]');
+          const tools=row.querySelector('[class*="_tools"]');
+          const trailing=row.querySelector('[class*="_trailing"]');
+          const standard=trailing.querySelector('[class*="_standardControls"]');
+          const prefix=trailing.classList[0].slice(0,trailing.classList[0].indexOf('_')+1);
+          const meter=document.querySelector('[data-composer-dock] > [class*="_root"]');
+          const previous={tools:tools.hidden,standard:standard.hidden,className:trailing.className,meterStyle:meter?.getAttribute("style")};
+          const positions=()=>[...document.querySelectorAll('[data-composer-stat]')].map(e=>[e.getBoundingClientRect().x,e.getBoundingClientRect().width]);
+          const stats=positions();
+          const activity=document.createElement('div');activity.className=prefix+'activityExpanded';
+          activity.style.cssText='display:flex;gap:6px;min-width:0;align-items:center';
+          const label=document.createElement('span');label.textContent='Queued work';label.style.cssText='flex:1;min-width:0;overflow:hidden;white-space:nowrap';activity.append(label);
+          for(let i=0;i<2;i++){const button=document.createElement('button');button.textContent=String(i);button.style.cssText='flex:none;width:36px;height:24px';activity.append(button);}
+          try {
+            // The host omits ContextMeter entirely while activity is expanded.
+            meter?.style.setProperty("display","none","important");
+            tools.hidden=true;standard.hidden=true;trailing.classList.add(prefix+'trailingActive');trailing.append(activity);
+            await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+            const box=trailing.getBoundingClientRect();
+            return {width:box.width,drift:Math.max(...positions().flatMap((r,i)=>r.map((v,j)=>Math.abs(v-stats[i][j])))),hit:[...activity.querySelectorAll('button')].every(button=>{const r=button.getBoundingClientRect();return button.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})};
+          } finally {activity.remove();tools.hidden=previous.tools;standard.hidden=previous.standard;trailing.className=previous.className;if(meter){if(previous.meterStyle===null)meter.removeAttribute("style");else meter.setAttribute("style",previous.meterStyle);}}
+        }).toString() + ')()'
+      );
+      assert.ok(active.width>=136 && active.hit, 'Active/queued actions must not be clipped inside the permission track');
+      assert.ok(active.drift<1, 'Active controls must preserve statistics positions');
+    } finally {
+      await send('Emulation.setDeviceMetricsOverride',{width:before.width,height:before.height,deviceScaleFactor:before.dpr,mobile:false});
+      await settle();
+    }
+  }
+  console.log('PASS active/queued controls remain hit-testable without moving statistics');
   await evaluate(`document.querySelector('[data-slot="conversation.input.model"] button').disabled=true`); await settle();
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-model-button").disabled'), true);
   await evaluate(`document.querySelector('[data-slot="conversation.input.model"] button').disabled=false`); await settle();
@@ -129,15 +178,24 @@ try {
   await key('Escape');
   await click('.fh-model-button');
   assert.equal(await evaluate('document.activeElement.className'), 'fh-model-search');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-model-search")).width'), '1px', 'No permanent search box in the reference menu');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-model-option")).minHeight'), '32px');
+  await capturePanel('furina-model-menu');
   await click('.fh-model-option:last-child');
   assert.deepEqual(await evaluate('window.__fhControlFixture.calls.at(-1)'), {provider:'test-provider',model:'plain'});
   assert.equal(await evaluate('!!window.__fhFixtureQuery(".fh-effort-button")'), false);
   await click('.fh-model-button'); await click('.fh-model-option');
   assert.deepEqual(await evaluate('window.__fhControlFixture.calls.at(-1)'), {provider:'test-provider',model:'alpha'});
   await click('.fh-effort-button');
+  assert.deepEqual(await evaluate(`(()=>{const track=window.__fhFixtureQuery('.fh-effort-track'),knob=window.__fhFixtureQuery('.fh-effort-knob'),ends=window.__fhFixtureQuery('.fh-effort-ends');return {rail:getComputedStyle(track,'::before').height,knob:[knob.offsetWidth,knob.offsetHeight],white:getComputedStyle(knob).backgroundColor,endsAbove:ends.getBoundingClientRect().bottom<=track.getBoundingClientRect().top,nativeOpacity:getComputedStyle(window.__fhFixtureQuery('.fh-effort-range')).opacity}})()`), {rail:'26px',knob:[16,30],white:'rgb(255, 255, 255)',endsAbove:true,nativeOpacity:'0'});
+  await capturePanel('furina-effort-normal');
   const count = await evaluate('window.__fhControlFixture.calls.length');
   await key('End');
   assert.equal(await evaluate('window.__fhControlFixture.calls.length'), count, 'Dragging/key preview must not commit');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-effort-matrix")).gridTemplateRows.split(" ").length'),5,'Apex is a five-row matrix, not a native range');
+  await evaluate('Promise.all(window.__fhFixtureQuery(".fh-effort-fill").getAnimations().map(a=>a.finished.catch(()=>{})))');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-effort-fill")).opacity'),'0');
+  await capturePanel('furina-effort-apex');
   await key('End', 'keyUp');
   assert.equal(await evaluate('window.__fhControlFixture.calls.length'), count + 1);
   assert.deepEqual(await evaluate('window.__fhControlFixture.calls.at(-1)'), {provider:'test-provider',model:'alpha',reasoningEffort:'provider-custom'});
@@ -148,6 +206,28 @@ try {
   await evaluate('window.__fhControlFixture.publish({current:{provider:"test-provider",model:"alpha",reasoningEffort:"legacy-provider-effort"},retainedEffort:"Legacy effort"})'); await settle();
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-effort-button").textContent'), 'Legacy effort', 'An unlisted active effort must not masquerade as Default');
   await evaluate('window.__fhControlFixture.publish({current:{provider:"test-provider",model:"alpha"},retainedEffort:null})'); await settle();
+  await evaluate(`(()=>{const f=window.__fhControlFixture;f.publish({groups:[...f.snapshot().groups,{id:'alternate',name:'Alternate provider',models:[{id:'other',name:'Other provider model',description:'Only shown in the main list'}]}]});})()`);await settle();
+  await click('.fh-model-button'); await click('.fh-model-more');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-model-submenu .fh-model-group-row")).position'),'sticky');
+  assert.equal(await evaluate('getComputedStyle(window.__fhFixtureQuery(".fh-control-popover")).overflow'),'visible','The flyout must not be clipped by the generic dialog skin');
+  assert.equal(await evaluate(`(()=>{const option=window.__fhFixtureQuery('.fh-model-submenu .fh-model-option');const r=option.getBoundingClientRect();return option.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`),true,'The flyout must be hit-testable, not merely present in DOM');
+  await capturePanel('furina-model-more');
+  const menuViewport = await evaluate('({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})');
+  try {
+    await send('Emulation.setDeviceMetricsOverride',{width:520,height:950,deviceScaleFactor:1,mobile:false}); await settle();
+    await evaluate('window.__fhFixtureQuery(".fh-model-more").focus()');
+    await key('ArrowDown');
+    assert.equal(await evaluate('!!document.activeElement.closest(".fh-model-submenu")'),true);
+    await key('ArrowDown');
+    assert.equal(await evaluate('document.activeElement.className'),'fh-model-search');
+    await key('ArrowDown');
+    assert.equal(await evaluate('document.activeElement.className'),'fh-model-more','Mobile keyboard navigation must skip hidden primary models');
+  } finally {
+    await send('Emulation.setDeviceMetricsOverride',{width:menuViewport.width,height:menuViewport.height,deviceScaleFactor:menuViewport.dpr,mobile:false}); await settle();
+  }
+  await click('.fh-model-submenu .fh-model-option');
+  assert.deepEqual(await evaluate('window.__fhControlFixture.calls.at(-1)'),{provider:'alternate',model:'other'});
+  await evaluate('window.__fhControlFixture.publish({current:{provider:"test-provider",model:"alpha"}})');await settle();
   await evaluate('window.__fhControlFixture.fail=true');
   await click('.fh-model-button'); await click('.fh-model-option:last-child');
   assert.equal(await evaluate('window.__fhFixtureQuery(".fh-control-error").textContent'), 'Fixture refused');
