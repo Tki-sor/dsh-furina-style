@@ -256,20 +256,11 @@ html[data-dsh-furina][data-dsh-furina-motion="on"] [class*="_sidebarCol"] {
 /* ---------------------------------------------------------------------------
    M10. 呼吸：装饰性水光层
    ---------------------------------------------------------------------------
-   纯装饰：一片极淡的径向光在画布右上缓慢漂移。只挂 body::before，
-   不参与命中测试，也不会成为 fixed 后代的包含块（不用 backdrop-filter）。
+   保留静态水光，不再让整窗底层永久 transform / opacity 漂移。
+   0.18 性能复现：同一 token 弹层六次打开，旧漂移的 p95 中位数为33.4ms；
+   仅冻结这一层即可回到16.7ms。底层移动会让上方半透明/模糊表面持续重合成，
+   “只动 transform”不等于整棵合成树免费。局部交互/弹层/光标动效保留。
    ------------------------------------------------------------------------- */
-@keyframes fh-ambient-drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.5;
-  }
-  50% {
-    transform: translate3d(-2%, 1.5%, 0) scale(1.06);
-    opacity: 0.72;
-  }
-}
 
 html[data-dsh-furina][data-dsh-furina-motion="on"][data-dsh-furina-surfaces="own"] body::before {
   content: "";
@@ -280,7 +271,8 @@ html[data-dsh-furina][data-dsh-furina-motion="on"][data-dsh-furina-surfaces="own
   background:
     radial-gradient(46% 34% at 78% 4%, color-mix(in srgb, var(--fh-brand-wash) 34%, transparent) 0, transparent 72%),
     radial-gradient(30% 26% at 14% 96%, color-mix(in srgb, var(--fh-pearl) 28%, transparent) 0, transparent 78%);
-  animation: fh-ambient-drift calc(var(--fh-dur-breathe) * 8) var(--fh-ease-settle) infinite;
+  opacity: 0.5;
+  animation: none;
 }
 
 /* ---------------------------------------------------------------------------

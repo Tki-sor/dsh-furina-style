@@ -1,6 +1,6 @@
 {
   "name": "dsh-furina-style",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Furina Style — 芙宁娜风格主题插件：芙宁娜水色与插画背景 + Claude 风格的布局与动效，配置在 DeepSeek 设置界面",
   "type": "module",
   "main": "index.js",
@@ -47,7 +47,8 @@
     "check:layout": "node scripts/check-composer-layout.mjs --matrix",
     "check:controls": "node scripts/check-composer-controls.mjs",
     "check:stability": "node scripts/check-composer-stability.mjs --matrix",
-    "check:account": "node scripts/check-account-menu.mjs --built"
+    "check:account": "node scripts/check-account-menu.mjs --built",
+    "check:performance": "node scripts/check-render-performance.mjs"
   },
   "dsh": {
     "engines": {
